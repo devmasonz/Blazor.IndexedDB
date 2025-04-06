@@ -138,7 +138,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.IndexedDbManager = void 0;
-const idb_1 = __webpack_require__(/*! ../node_modules/idb/lib/idb */ "./node_modules/idb/lib/idb.js");
+const idb_1 = __webpack_require__(/*! idb */ "./node_modules/idb/build/index.js");
 class IndexedDbManager {
     constructor() {
         this.dbInstance = undefined;
@@ -153,19 +153,21 @@ class IndexedDbManager {
                     if (this.dbInstance) {
                         this.dbInstance.close();
                     }
-                    this.dbInstance = yield idb_1.default.open(dbStore.dbName, dbStore.version, upgradeDB => {
-                        this.upgradeDatabase(upgradeDB, dbStore);
+                    this.dbInstance = yield idb_1.openDB(dbStore.dbName, dbStore.version, {
+                        upgrade: (db, oldVersion, newVersion, transaction) => {
+                            this.upgradeDatabase(db, oldVersion, dbStore);
+                        }
                     });
                 }
             }
             catch (e) {
-                this.dbInstance = yield idb_1.default.open(dbStore.dbName);
+                this.dbInstance = yield idb_1.openDB(dbStore.dbName);
             }
             return `IndexedDB ${data.dbName} opened`;
         });
         this.getDbInfo = (dbName) => __awaiter(this, void 0, void 0, function* () {
             if (!this.dbInstance) {
-                this.dbInstance = yield idb_1.default.open(dbName);
+                this.dbInstance = yield idb_1.openDB(dbName);
             }
             const currentDb = this.dbInstance;
             let getStoreNames = (list) => {
@@ -182,85 +184,104 @@ class IndexedDbManager {
             return dbInfo;
         });
         this.deleteDb = (dbName) => __awaiter(this, void 0, void 0, function* () {
-            this.dbInstance.close();
-            yield idb_1.default.delete(dbName);
+            if (this.dbInstance) {
+                this.dbInstance.close();
+            }
+            yield idb_1.deleteDB(dbName);
             this.dbInstance = undefined;
             return `The database ${dbName} has been deleted`;
         });
         this.addRecord = (record) => __awaiter(this, void 0, void 0, function* () {
             const stName = record.storename;
             let itemToSave = record.data;
-            const tx = this.getTransaction(this.dbInstance, stName, 'readwrite');
+            if (!this.dbInstance) {
+                throw new Error("Database instance not initialized");
+            }
+            const tx = this.dbInstance.transaction(stName, 'readwrite');
             const objectStore = tx.objectStore(stName);
             itemToSave = this.checkForKeyPath(objectStore, itemToSave);
-            const result = yield objectStore.add(itemToSave, record.key);
+            const result = record.key ?
+                yield objectStore.add(itemToSave, record.key) :
+                yield objectStore.add(itemToSave);
+            yield tx.done;
             return `Added new record with id ${result}`;
         });
         this.updateRecord = (record) => __awaiter(this, void 0, void 0, function* () {
             const stName = record.storename;
-            const tx = this.getTransaction(this.dbInstance, stName, 'readwrite');
-            const result = yield tx.objectStore(stName).put(record.data, record.key);
+            if (!this.dbInstance) {
+                throw new Error("Database instance not initialized");
+            }
+            const tx = this.dbInstance.transaction(stName, 'readwrite');
+            const result = record.key ?
+                yield tx.objectStore(stName).put(record.data, record.key) :
+                yield tx.objectStore(stName).put(record.data);
+            yield tx.done;
             return `updated record with id ${result}`;
         });
         this.getRecords = (storeName) => __awaiter(this, void 0, void 0, function* () {
-            const tx = this.getTransaction(this.dbInstance, storeName, 'readonly');
-            let results = yield tx.objectStore(storeName).getAll();
-            yield tx.complete;
+            if (!this.dbInstance) {
+                throw new Error("Database instance not initialized");
+            }
+            const tx = this.dbInstance.transaction(storeName, 'readonly');
+            const results = yield tx.objectStore(storeName).getAll();
+            yield tx.done;
             return results;
         });
         this.clearStore = (storeName) => __awaiter(this, void 0, void 0, function* () {
-            const tx = this.getTransaction(this.dbInstance, storeName, 'readwrite');
+            if (!this.dbInstance) {
+                throw new Error("Database instance not initialized");
+            }
+            const tx = this.dbInstance.transaction(storeName, 'readwrite');
             yield tx.objectStore(storeName).clear();
-            yield tx.complete;
+            yield tx.done;
             return `Store ${storeName} cleared`;
         });
         this.getRecordByIndex = (searchData) => __awaiter(this, void 0, void 0, function* () {
-            const tx = this.getTransaction(this.dbInstance, searchData.storename, 'readonly');
+            if (!this.dbInstance) {
+                throw new Error("Database instance not initialized");
+            }
+            const tx = this.dbInstance.transaction(searchData.storename, 'readonly');
             const results = yield tx.objectStore(searchData.storename)
                 .index(searchData.indexName)
                 .get(searchData.queryValue);
-            yield tx.complete;
+            yield tx.done;
             return results;
         });
         this.getAllRecordsByIndex = (searchData) => __awaiter(this, void 0, void 0, function* () {
-            const tx = this.getTransaction(this.dbInstance, searchData.storename, 'readonly');
+            if (!this.dbInstance) {
+                throw new Error("Database instance not initialized");
+            }
+            const tx = this.dbInstance.transaction(searchData.storename, 'readonly');
+            const index = tx.objectStore(searchData.storename).index(searchData.indexName);
             let results = [];
-            tx.objectStore(searchData.storename)
-                .index(searchData.indexName)
-                .iterateCursor(cursor => {
-                if (!cursor) {
-                    return;
-                }
+            let cursor = yield index.openCursor();
+            while (cursor) {
                 if (cursor.key === searchData.queryValue) {
                     results.push(cursor.value);
                 }
-                cursor.continue();
-            });
-            yield tx.complete;
+                cursor = yield cursor.continue();
+            }
+            yield tx.done;
             return results;
         });
         this.getRecordById = (storename, id) => __awaiter(this, void 0, void 0, function* () {
-            const tx = this.getTransaction(this.dbInstance, storename, 'readonly');
+            if (!this.dbInstance) {
+                throw new Error("Database instance not initialized");
+            }
+            const tx = this.dbInstance.transaction(storename, 'readonly');
             let result = yield tx.objectStore(storename).get(id);
+            yield tx.done;
             return result;
         });
         this.deleteRecord = (storename, id) => __awaiter(this, void 0, void 0, function* () {
-            const tx = this.getTransaction(this.dbInstance, storename, 'readwrite');
+            if (!this.dbInstance) {
+                throw new Error("Database instance not initialized");
+            }
+            const tx = this.dbInstance.transaction(storename, 'readwrite');
             yield tx.objectStore(storename).delete(id);
+            yield tx.done;
             return `Record with id: ${id} deleted`;
         });
-    }
-    getTransaction(dbInstance, stName, mode) {
-        const tx = dbInstance.transaction(stName, mode);
-        tx.complete.catch(err => {
-            if (err) {
-                console.error(err.message);
-            }
-            else {
-                console.error('Undefined error in getTransaction()');
-            }
-        });
-        return tx;
     }
     checkForKeyPath(objectStore, data) {
         if (!objectStore.autoIncrement || !objectStore.keyPath) {
@@ -275,24 +296,24 @@ class IndexedDbManager {
         }
         return data;
     }
-    upgradeDatabase(upgradeDB, dbStore) {
-        if (upgradeDB.oldVersion < dbStore.version) {
+    upgradeDatabase(db, oldVersion, dbStore) {
+        if (oldVersion < dbStore.version) {
             if (dbStore.stores) {
                 for (var store of dbStore.stores) {
-                    if (!upgradeDB.objectStoreNames.contains(store.name)) {
-                        this.addNewStore(upgradeDB, store);
+                    if (!db.objectStoreNames.contains(store.name)) {
+                        this.addNewStore(db, store);
                         this.dotnetCallback(`store added ${store.name}: db version: ${dbStore.version}`);
                     }
                 }
             }
         }
     }
-    addNewStore(upgradeDB, store) {
+    addNewStore(db, store) {
         let primaryKey = store.primaryKey;
         if (!primaryKey) {
             primaryKey = { name: 'id', keyPath: 'id', auto: true };
         }
-        const newStore = upgradeDB.createObjectStore(store.name, { keyPath: primaryKey.keyPath, autoIncrement: primaryKey.auto });
+        const newStore = db.createObjectStore(store.name, { keyPath: primaryKey.keyPath, autoIncrement: primaryKey.auto });
         for (var index of store.indexes) {
             newStore.createIndex(index.name, index.keyPath, { unique: index.unique });
         }
@@ -303,328 +324,324 @@ exports.IndexedDbManager = IndexedDbManager;
 
 /***/ }),
 
-/***/ "./node_modules/idb/lib/idb.js":
-/*!*************************************!*\
-  !*** ./node_modules/idb/lib/idb.js ***!
-  \*************************************/
-/*! no static exports found */
-/***/ (function(module, exports, __webpack_require__) {
+/***/ "./node_modules/idb/build/index.js":
+/*!*****************************************!*\
+  !*** ./node_modules/idb/build/index.js ***!
+  \*****************************************/
+/*! exports provided: deleteDB, openDB, unwrap, wrap */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "deleteDB", function() { return deleteDB; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "openDB", function() { return openDB; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "unwrap", function() { return unwrap; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "wrap", function() { return wrap; });
+const instanceOfAny = (object, constructors) => constructors.some((c) => object instanceof c);
 
-
-(function() {
-  function toArray(arr) {
-    return Array.prototype.slice.call(arr);
-  }
-
-  function promisifyRequest(request) {
-    return new Promise(function(resolve, reject) {
-      request.onsuccess = function() {
-        resolve(request.result);
-      };
-
-      request.onerror = function() {
-        reject(request.error);
-      };
+let idbProxyableTypes;
+let cursorAdvanceMethods;
+// This is a function to prevent it throwing up in node environments.
+function getIdbProxyableTypes() {
+    return (idbProxyableTypes ||
+        (idbProxyableTypes = [
+            IDBDatabase,
+            IDBObjectStore,
+            IDBIndex,
+            IDBCursor,
+            IDBTransaction,
+        ]));
+}
+// This is a function to prevent it throwing up in node environments.
+function getCursorAdvanceMethods() {
+    return (cursorAdvanceMethods ||
+        (cursorAdvanceMethods = [
+            IDBCursor.prototype.advance,
+            IDBCursor.prototype.continue,
+            IDBCursor.prototype.continuePrimaryKey,
+        ]));
+}
+const transactionDoneMap = new WeakMap();
+const transformCache = new WeakMap();
+const reverseTransformCache = new WeakMap();
+function promisifyRequest(request) {
+    const promise = new Promise((resolve, reject) => {
+        const unlisten = () => {
+            request.removeEventListener('success', success);
+            request.removeEventListener('error', error);
+        };
+        const success = () => {
+            resolve(wrap(request.result));
+            unlisten();
+        };
+        const error = () => {
+            reject(request.error);
+            unlisten();
+        };
+        request.addEventListener('success', success);
+        request.addEventListener('error', error);
     });
-  }
-
-  function promisifyRequestCall(obj, method, args) {
-    var request;
-    var p = new Promise(function(resolve, reject) {
-      request = obj[method].apply(obj, args);
-      promisifyRequest(request).then(resolve, reject);
+    // This mapping exists in reverseTransformCache but doesn't exist in transformCache. This
+    // is because we create many promises from a single IDBRequest.
+    reverseTransformCache.set(promise, request);
+    return promise;
+}
+function cacheDonePromiseForTransaction(tx) {
+    // Early bail if we've already created a done promise for this transaction.
+    if (transactionDoneMap.has(tx))
+        return;
+    const done = new Promise((resolve, reject) => {
+        const unlisten = () => {
+            tx.removeEventListener('complete', complete);
+            tx.removeEventListener('error', error);
+            tx.removeEventListener('abort', error);
+        };
+        const complete = () => {
+            resolve();
+            unlisten();
+        };
+        const error = () => {
+            reject(tx.error || new DOMException('AbortError', 'AbortError'));
+            unlisten();
+        };
+        tx.addEventListener('complete', complete);
+        tx.addEventListener('error', error);
+        tx.addEventListener('abort', error);
     });
-
-    p.request = request;
-    return p;
-  }
-
-  function promisifyCursorRequestCall(obj, method, args) {
-    var p = promisifyRequestCall(obj, method, args);
-    return p.then(function(value) {
-      if (!value) return;
-      return new Cursor(value, p.request);
-    });
-  }
-
-  function proxyProperties(ProxyClass, targetProp, properties) {
-    properties.forEach(function(prop) {
-      Object.defineProperty(ProxyClass.prototype, prop, {
-        get: function() {
-          return this[targetProp][prop];
-        },
-        set: function(val) {
-          this[targetProp][prop] = val;
+    // Cache it for later retrieval.
+    transactionDoneMap.set(tx, done);
+}
+let idbProxyTraps = {
+    get(target, prop, receiver) {
+        if (target instanceof IDBTransaction) {
+            // Special handling for transaction.done.
+            if (prop === 'done')
+                return transactionDoneMap.get(target);
+            // Make tx.store return the only store in the transaction, or undefined if there are many.
+            if (prop === 'store') {
+                return receiver.objectStoreNames[1]
+                    ? undefined
+                    : receiver.objectStore(receiver.objectStoreNames[0]);
+            }
         }
-      });
-    });
-  }
-
-  function proxyRequestMethods(ProxyClass, targetProp, Constructor, properties) {
-    properties.forEach(function(prop) {
-      if (!(prop in Constructor.prototype)) return;
-      ProxyClass.prototype[prop] = function() {
-        return promisifyRequestCall(this[targetProp], prop, arguments);
-      };
-    });
-  }
-
-  function proxyMethods(ProxyClass, targetProp, Constructor, properties) {
-    properties.forEach(function(prop) {
-      if (!(prop in Constructor.prototype)) return;
-      ProxyClass.prototype[prop] = function() {
-        return this[targetProp][prop].apply(this[targetProp], arguments);
-      };
-    });
-  }
-
-  function proxyCursorRequestMethods(ProxyClass, targetProp, Constructor, properties) {
-    properties.forEach(function(prop) {
-      if (!(prop in Constructor.prototype)) return;
-      ProxyClass.prototype[prop] = function() {
-        return promisifyCursorRequestCall(this[targetProp], prop, arguments);
-      };
-    });
-  }
-
-  function Index(index) {
-    this._index = index;
-  }
-
-  proxyProperties(Index, '_index', [
-    'name',
-    'keyPath',
-    'multiEntry',
-    'unique'
-  ]);
-
-  proxyRequestMethods(Index, '_index', IDBIndex, [
-    'get',
-    'getKey',
-    'getAll',
-    'getAllKeys',
-    'count'
-  ]);
-
-  proxyCursorRequestMethods(Index, '_index', IDBIndex, [
-    'openCursor',
-    'openKeyCursor'
-  ]);
-
-  function Cursor(cursor, request) {
-    this._cursor = cursor;
-    this._request = request;
-  }
-
-  proxyProperties(Cursor, '_cursor', [
-    'direction',
-    'key',
-    'primaryKey',
-    'value'
-  ]);
-
-  proxyRequestMethods(Cursor, '_cursor', IDBCursor, [
-    'update',
-    'delete'
-  ]);
-
-  // proxy 'next' methods
-  ['advance', 'continue', 'continuePrimaryKey'].forEach(function(methodName) {
-    if (!(methodName in IDBCursor.prototype)) return;
-    Cursor.prototype[methodName] = function() {
-      var cursor = this;
-      var args = arguments;
-      return Promise.resolve().then(function() {
-        cursor._cursor[methodName].apply(cursor._cursor, args);
-        return promisifyRequest(cursor._request).then(function(value) {
-          if (!value) return;
-          return new Cursor(value, cursor._request);
-        });
-      });
-    };
-  });
-
-  function ObjectStore(store) {
-    this._store = store;
-  }
-
-  ObjectStore.prototype.createIndex = function() {
-    return new Index(this._store.createIndex.apply(this._store, arguments));
-  };
-
-  ObjectStore.prototype.index = function() {
-    return new Index(this._store.index.apply(this._store, arguments));
-  };
-
-  proxyProperties(ObjectStore, '_store', [
-    'name',
-    'keyPath',
-    'indexNames',
-    'autoIncrement'
-  ]);
-
-  proxyRequestMethods(ObjectStore, '_store', IDBObjectStore, [
-    'put',
-    'add',
-    'delete',
-    'clear',
-    'get',
-    'getAll',
-    'getKey',
-    'getAllKeys',
-    'count'
-  ]);
-
-  proxyCursorRequestMethods(ObjectStore, '_store', IDBObjectStore, [
-    'openCursor',
-    'openKeyCursor'
-  ]);
-
-  proxyMethods(ObjectStore, '_store', IDBObjectStore, [
-    'deleteIndex'
-  ]);
-
-  function Transaction(idbTransaction) {
-    this._tx = idbTransaction;
-    this.complete = new Promise(function(resolve, reject) {
-      idbTransaction.oncomplete = function() {
-        resolve();
-      };
-      idbTransaction.onerror = function() {
-        reject(idbTransaction.error);
-      };
-      idbTransaction.onabort = function() {
-        reject(idbTransaction.error);
-      };
-    });
-  }
-
-  Transaction.prototype.objectStore = function() {
-    return new ObjectStore(this._tx.objectStore.apply(this._tx, arguments));
-  };
-
-  proxyProperties(Transaction, '_tx', [
-    'objectStoreNames',
-    'mode'
-  ]);
-
-  proxyMethods(Transaction, '_tx', IDBTransaction, [
-    'abort'
-  ]);
-
-  function UpgradeDB(db, oldVersion, transaction) {
-    this._db = db;
-    this.oldVersion = oldVersion;
-    this.transaction = new Transaction(transaction);
-  }
-
-  UpgradeDB.prototype.createObjectStore = function() {
-    return new ObjectStore(this._db.createObjectStore.apply(this._db, arguments));
-  };
-
-  proxyProperties(UpgradeDB, '_db', [
-    'name',
-    'version',
-    'objectStoreNames'
-  ]);
-
-  proxyMethods(UpgradeDB, '_db', IDBDatabase, [
-    'deleteObjectStore',
-    'close'
-  ]);
-
-  function DB(db) {
-    this._db = db;
-  }
-
-  DB.prototype.transaction = function() {
-    return new Transaction(this._db.transaction.apply(this._db, arguments));
-  };
-
-  proxyProperties(DB, '_db', [
-    'name',
-    'version',
-    'objectStoreNames'
-  ]);
-
-  proxyMethods(DB, '_db', IDBDatabase, [
-    'close'
-  ]);
-
-  // Add cursor iterators
-  // TODO: remove this once browsers do the right thing with promises
-  ['openCursor', 'openKeyCursor'].forEach(function(funcName) {
-    [ObjectStore, Index].forEach(function(Constructor) {
-      // Don't create iterateKeyCursor if openKeyCursor doesn't exist.
-      if (!(funcName in Constructor.prototype)) return;
-
-      Constructor.prototype[funcName.replace('open', 'iterate')] = function() {
-        var args = toArray(arguments);
-        var callback = args[args.length - 1];
-        var nativeObject = this._store || this._index;
-        var request = nativeObject[funcName].apply(nativeObject, args.slice(0, -1));
-        request.onsuccess = function() {
-          callback(request.result);
-        };
-      };
-    });
-  });
-
-  // polyfill getAll
-  [Index, ObjectStore].forEach(function(Constructor) {
-    if (Constructor.prototype.getAll) return;
-    Constructor.prototype.getAll = function(query, count) {
-      var instance = this;
-      var items = [];
-
-      return new Promise(function(resolve) {
-        instance.iterateCursor(query, function(cursor) {
-          if (!cursor) {
-            resolve(items);
-            return;
-          }
-          items.push(cursor.value);
-
-          if (count !== undefined && items.length == count) {
-            resolve(items);
-            return;
-          }
-          cursor.continue();
-        });
-      });
-    };
-  });
-
-  var exp = {
-    open: function(name, version, upgradeCallback) {
-      var p = promisifyRequestCall(indexedDB, 'open', [name, version]);
-      var request = p.request;
-
-      if (request) {
-        request.onupgradeneeded = function(event) {
-          if (upgradeCallback) {
-            upgradeCallback(new UpgradeDB(request.result, event.oldVersion, request.transaction));
-          }
-        };
-      }
-
-      return p.then(function(db) {
-        return new DB(db);
-      });
+        // Else transform whatever we get back.
+        return wrap(target[prop]);
     },
-    delete: function(name) {
-      return promisifyRequestCall(indexedDB, 'deleteDatabase', [name]);
+    set(target, prop, value) {
+        target[prop] = value;
+        return true;
+    },
+    has(target, prop) {
+        if (target instanceof IDBTransaction &&
+            (prop === 'done' || prop === 'store')) {
+            return true;
+        }
+        return prop in target;
+    },
+};
+function replaceTraps(callback) {
+    idbProxyTraps = callback(idbProxyTraps);
+}
+function wrapFunction(func) {
+    // Due to expected object equality (which is enforced by the caching in `wrap`), we
+    // only create one new func per func.
+    // Cursor methods are special, as the behaviour is a little more different to standard IDB. In
+    // IDB, you advance the cursor and wait for a new 'success' on the IDBRequest that gave you the
+    // cursor. It's kinda like a promise that can resolve with many values. That doesn't make sense
+    // with real promises, so each advance methods returns a new promise for the cursor object, or
+    // undefined if the end of the cursor has been reached.
+    if (getCursorAdvanceMethods().includes(func)) {
+        return function (...args) {
+            // Calling the original function with the proxy as 'this' causes ILLEGAL INVOCATION, so we use
+            // the original object.
+            func.apply(unwrap(this), args);
+            return wrap(this.request);
+        };
     }
-  };
+    return function (...args) {
+        // Calling the original function with the proxy as 'this' causes ILLEGAL INVOCATION, so we use
+        // the original object.
+        return wrap(func.apply(unwrap(this), args));
+    };
+}
+function transformCachableValue(value) {
+    if (typeof value === 'function')
+        return wrapFunction(value);
+    // This doesn't return, it just creates a 'done' promise for the transaction,
+    // which is later returned for transaction.done (see idbObjectHandler).
+    if (value instanceof IDBTransaction)
+        cacheDonePromiseForTransaction(value);
+    if (instanceOfAny(value, getIdbProxyableTypes()))
+        return new Proxy(value, idbProxyTraps);
+    // Return the same value back if we're not going to transform it.
+    return value;
+}
+function wrap(value) {
+    // We sometimes generate multiple promises from a single IDBRequest (eg when cursoring), because
+    // IDB is weird and a single IDBRequest can yield many responses, so these can't be cached.
+    if (value instanceof IDBRequest)
+        return promisifyRequest(value);
+    // If we've already transformed this value before, reuse the transformed value.
+    // This is faster, but it also provides object equality.
+    if (transformCache.has(value))
+        return transformCache.get(value);
+    const newValue = transformCachableValue(value);
+    // Not all types are transformed.
+    // These may be primitive types, so they can't be WeakMap keys.
+    if (newValue !== value) {
+        transformCache.set(value, newValue);
+        reverseTransformCache.set(newValue, value);
+    }
+    return newValue;
+}
+const unwrap = (value) => reverseTransformCache.get(value);
 
-  if (true) {
-    module.exports = exp;
-    module.exports.default = module.exports;
-  }
-  else {}
-}());
+/**
+ * Open a database.
+ *
+ * @param name Name of the database.
+ * @param version Schema version.
+ * @param callbacks Additional callbacks.
+ */
+function openDB(name, version, { blocked, upgrade, blocking, terminated } = {}) {
+    const request = indexedDB.open(name, version);
+    const openPromise = wrap(request);
+    if (upgrade) {
+        request.addEventListener('upgradeneeded', (event) => {
+            upgrade(wrap(request.result), event.oldVersion, event.newVersion, wrap(request.transaction), event);
+        });
+    }
+    if (blocked) {
+        request.addEventListener('blocked', (event) => blocked(
+        // Casting due to https://github.com/microsoft/TypeScript-DOM-lib-generator/pull/1405
+        event.oldVersion, event.newVersion, event));
+    }
+    openPromise
+        .then((db) => {
+        if (terminated)
+            db.addEventListener('close', () => terminated());
+        if (blocking) {
+            db.addEventListener('versionchange', (event) => blocking(event.oldVersion, event.newVersion, event));
+        }
+    })
+        .catch(() => { });
+    return openPromise;
+}
+/**
+ * Delete a database.
+ *
+ * @param name Name of the database.
+ */
+function deleteDB(name, { blocked } = {}) {
+    const request = indexedDB.deleteDatabase(name);
+    if (blocked) {
+        request.addEventListener('blocked', (event) => blocked(
+        // Casting due to https://github.com/microsoft/TypeScript-DOM-lib-generator/pull/1405
+        event.oldVersion, event));
+    }
+    return wrap(request).then(() => undefined);
+}
+
+const readMethods = ['get', 'getKey', 'getAll', 'getAllKeys', 'count'];
+const writeMethods = ['put', 'add', 'delete', 'clear'];
+const cachedMethods = new Map();
+function getMethod(target, prop) {
+    if (!(target instanceof IDBDatabase &&
+        !(prop in target) &&
+        typeof prop === 'string')) {
+        return;
+    }
+    if (cachedMethods.get(prop))
+        return cachedMethods.get(prop);
+    const targetFuncName = prop.replace(/FromIndex$/, '');
+    const useIndex = prop !== targetFuncName;
+    const isWrite = writeMethods.includes(targetFuncName);
+    if (
+    // Bail if the target doesn't exist on the target. Eg, getAll isn't in Edge.
+    !(targetFuncName in (useIndex ? IDBIndex : IDBObjectStore).prototype) ||
+        !(isWrite || readMethods.includes(targetFuncName))) {
+        return;
+    }
+    const method = async function (storeName, ...args) {
+        // isWrite ? 'readwrite' : undefined gzipps better, but fails in Edge :(
+        const tx = this.transaction(storeName, isWrite ? 'readwrite' : 'readonly');
+        let target = tx.store;
+        if (useIndex)
+            target = target.index(args.shift());
+        // Must reject if op rejects.
+        // If it's a write operation, must reject if tx.done rejects.
+        // Must reject with op rejection first.
+        // Must resolve with op value.
+        // Must handle both promises (no unhandled rejections)
+        return (await Promise.all([
+            target[targetFuncName](...args),
+            isWrite && tx.done,
+        ]))[0];
+    };
+    cachedMethods.set(prop, method);
+    return method;
+}
+replaceTraps((oldTraps) => ({
+    ...oldTraps,
+    get: (target, prop, receiver) => getMethod(target, prop) || oldTraps.get(target, prop, receiver),
+    has: (target, prop) => !!getMethod(target, prop) || oldTraps.has(target, prop),
+}));
+
+const advanceMethodProps = ['continue', 'continuePrimaryKey', 'advance'];
+const methodMap = {};
+const advanceResults = new WeakMap();
+const ittrProxiedCursorToOriginalProxy = new WeakMap();
+const cursorIteratorTraps = {
+    get(target, prop) {
+        if (!advanceMethodProps.includes(prop))
+            return target[prop];
+        let cachedFunc = methodMap[prop];
+        if (!cachedFunc) {
+            cachedFunc = methodMap[prop] = function (...args) {
+                advanceResults.set(this, ittrProxiedCursorToOriginalProxy.get(this)[prop](...args));
+            };
+        }
+        return cachedFunc;
+    },
+};
+async function* iterate(...args) {
+    // tslint:disable-next-line:no-this-assignment
+    let cursor = this;
+    if (!(cursor instanceof IDBCursor)) {
+        cursor = await cursor.openCursor(...args);
+    }
+    if (!cursor)
+        return;
+    cursor = cursor;
+    const proxiedCursor = new Proxy(cursor, cursorIteratorTraps);
+    ittrProxiedCursorToOriginalProxy.set(proxiedCursor, cursor);
+    // Map this double-proxy back to the original, so other cursor methods work.
+    reverseTransformCache.set(proxiedCursor, unwrap(cursor));
+    while (cursor) {
+        yield proxiedCursor;
+        // If one of the advancing methods was not called, call continue().
+        cursor = await (advanceResults.get(proxiedCursor) || cursor.continue());
+        advanceResults.delete(proxiedCursor);
+    }
+}
+function isIteratorProp(target, prop) {
+    return ((prop === Symbol.asyncIterator &&
+        instanceOfAny(target, [IDBIndex, IDBObjectStore, IDBCursor])) ||
+        (prop === 'iterate' && instanceOfAny(target, [IDBIndex, IDBObjectStore])));
+}
+replaceTraps((oldTraps) => ({
+    ...oldTraps,
+    get(target, prop, receiver) {
+        if (isIteratorProp(target, prop))
+            return iterate;
+        return oldTraps.get(target, prop, receiver);
+    },
+    has(target, prop) {
+        return isIteratorProp(target, prop) || oldTraps.has(target, prop);
+    },
+}));
+
+
 
 
 /***/ })

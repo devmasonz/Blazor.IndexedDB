@@ -1,11 +1,10 @@
 ﻿///// <reference path="Microsoft.JSInterop.d.ts"/>
-import idb from '../node_modules/idb/lib/idb';
-import { DB, UpgradeDB, ObjectStore, Transaction } from '../node_modules/idb/lib/idb';
+import { openDB, deleteDB, DBSchema, IDBPDatabase, IDBPTransaction, IDBPObjectStore } from 'idb';
 import { IDbStore, IIndexSearch, IIndexSpec, IStoreRecord, IStoreSchema, IDotNetInstanceWrapper, IDbInformation } from './InteropInterfaces';
 
 export class IndexedDbManager {
 
-    private dbInstance:any = undefined;
+    private dbInstance: IDBPDatabase<any> | undefined = undefined;
     private dotnetCallback = (message: string) => { };
 
     constructor() { }
@@ -22,12 +21,14 @@ export class IndexedDbManager {
                 if (this.dbInstance) {
                     this.dbInstance.close();
                 }
-                this.dbInstance = await idb.open(dbStore.dbName, dbStore.version, upgradeDB => {
-                    this.upgradeDatabase(upgradeDB, dbStore);
+                this.dbInstance = await openDB(dbStore.dbName, dbStore.version, {
+                    upgrade: (db, oldVersion, newVersion, transaction) => {
+                        this.upgradeDatabase(db, oldVersion, dbStore);
+                    }
                 });
             }
         } catch (e) {
-            this.dbInstance = await idb.open(dbStore.dbName);
+            this.dbInstance = await openDB(dbStore.dbName);
         }
         
         return `IndexedDB ${data.dbName} opened`;
@@ -35,10 +36,10 @@ export class IndexedDbManager {
 
     public getDbInfo = async (dbName: string) : Promise<IDbInformation> => {
         if (!this.dbInstance) {
-            this.dbInstance = await idb.open(dbName);
+            this.dbInstance = await openDB(dbName);
         }
 
-        const currentDb = <DB>this.dbInstance;
+        const currentDb = this.dbInstance;
 
         let getStoreNames = (list: DOMStringList): string[] => {
             let names: string[] = [];
@@ -56,9 +57,11 @@ export class IndexedDbManager {
     }
 
     public deleteDb = async(dbName: string): Promise<string> => {
-        this.dbInstance.close();
+        if (this.dbInstance) {
+            this.dbInstance.close();
+        }
 
-        await idb.delete(dbName);
+        await deleteDB(dbName);
 
         this.dbInstance = undefined;
 
@@ -68,111 +71,125 @@ export class IndexedDbManager {
     public addRecord = async (record: IStoreRecord): Promise<string> => {
         const stName = record.storename;
         let itemToSave = record.data;
-        const tx = this.getTransaction(this.dbInstance, stName, 'readwrite');
+        
+        if (!this.dbInstance) {
+            throw new Error("Database instance not initialized");
+        }
+        
+        const tx = this.dbInstance.transaction(stName, 'readwrite');
         const objectStore = tx.objectStore(stName);
 
         itemToSave = this.checkForKeyPath(objectStore, itemToSave);
 
-        const result = await objectStore.add(itemToSave, record.key);
+        const result = record.key ? 
+            await objectStore.add(itemToSave, record.key) : 
+            await objectStore.add(itemToSave);
 
+        await tx.done;
         return `Added new record with id ${result}`;
     }
 
     public updateRecord = async (record: IStoreRecord): Promise<string> => {
         const stName = record.storename;
-        const tx = this.getTransaction(this.dbInstance, stName, 'readwrite');
-
-        const result = await tx.objectStore(stName).put(record.data, record.key);
-       
+        
+        if (!this.dbInstance) {
+            throw new Error("Database instance not initialized");
+        }
+        
+        const tx = this.dbInstance.transaction(stName, 'readwrite');
+        const result = record.key ? 
+            await tx.objectStore(stName).put(record.data, record.key) : 
+            await tx.objectStore(stName).put(record.data);
+        
+        await tx.done;
         return `updated record with id ${result}`;
     }
 
     public getRecords = async (storeName: string): Promise<any> => {
-        const tx = this.getTransaction(this.dbInstance, storeName, 'readonly');
-
-        let results = await tx.objectStore(storeName).getAll();
-
-        await tx.complete;
+        if (!this.dbInstance) {
+            throw new Error("Database instance not initialized");
+        }
+        
+        const tx = this.dbInstance.transaction(storeName, 'readonly');
+        const results = await tx.objectStore(storeName).getAll();
+        await tx.done;
 
         return results;
     }
 
     public clearStore = async (storeName: string): Promise<string> => {
+        if (!this.dbInstance) {
+            throw new Error("Database instance not initialized");
+        }
         
-        const tx = this.getTransaction(this.dbInstance, storeName, 'readwrite');
-
+        const tx = this.dbInstance.transaction(storeName, 'readwrite');
         await tx.objectStore(storeName).clear();
-        await tx.complete;
+        await tx.done;
 
         return `Store ${storeName} cleared`;
     }
 
     public getRecordByIndex = async (searchData: IIndexSearch): Promise<any> => {
-        const tx = this.getTransaction(this.dbInstance, searchData.storename, 'readonly');
+        if (!this.dbInstance) {
+            throw new Error("Database instance not initialized");
+        }
+        
+        const tx = this.dbInstance.transaction(searchData.storename, 'readonly');
         const results = await tx.objectStore(searchData.storename)
             .index(searchData.indexName)
             .get(searchData.queryValue);
 
-        await tx.complete;
+        await tx.done;
         return results;
     }
 
     public getAllRecordsByIndex = async (searchData: IIndexSearch): Promise<any> => {
-        const tx = this.getTransaction(this.dbInstance, searchData.storename, 'readonly');
+        if (!this.dbInstance) {
+            throw new Error("Database instance not initialized");
+        }
+        
+        const tx = this.dbInstance.transaction(searchData.storename, 'readonly');
+        const index = tx.objectStore(searchData.storename).index(searchData.indexName);
         let results: any[] = [];
 
-        tx.objectStore(searchData.storename)
-            .index(searchData.indexName)
-            .iterateCursor(cursor => {
-                if (!cursor) {
-                    return;
-                }
+        // Using async iteration instead of iterateCursor (which was removed in idb 4.x)
+        let cursor = await index.openCursor();
+        while (cursor) {
+            if (cursor.key === searchData.queryValue) {
+                results.push(cursor.value);
+            }
+            cursor = await cursor.continue();
+        }
 
-                if (cursor.key === searchData.queryValue) {
-                    results.push(cursor.value);
-                }
-
-                cursor.continue();
-            });
-
-        await tx.complete;
-
+        await tx.done;
         return results;
     }
 
     public getRecordById = async (storename: string, id: any): Promise<any> => {
-
-        const tx = this.getTransaction(this.dbInstance, storename, 'readonly');
-
+        if (!this.dbInstance) {
+            throw new Error("Database instance not initialized");
+        }
+        
+        const tx = this.dbInstance.transaction(storename, 'readonly');
         let result = await tx.objectStore(storename).get(id);
+        await tx.done;
         return result;
     }
 
     public deleteRecord = async (storename: string, id: any): Promise<string> => {
-        const tx = this.getTransaction(this.dbInstance, storename, 'readwrite');
-
+        if (!this.dbInstance) {
+            throw new Error("Database instance not initialized");
+        }
+        
+        const tx = this.dbInstance.transaction(storename, 'readwrite');
         await tx.objectStore(storename).delete(id);
+        await tx.done;
 
         return `Record with id: ${id} deleted`;
     }
 
-    private getTransaction(dbInstance: DB, stName: string, mode?: 'readonly' | 'readwrite') {
-        const tx = dbInstance.transaction(stName, mode);
-        tx.complete.catch(
-            err => {
-                if (err) {
-                    console.error((err as Error).message);
-                } else {
-                    console.error('Undefined error in getTransaction()');
-                }
-                
-            });
-
-        return tx;
-    }
-
     // Currently don't support aggregate keys
-    private checkForKeyPath(objectStore: ObjectStore<any, any>, data: any) {
+    private checkForKeyPath(objectStore: IDBPObjectStore<any, any, any, any>, data: any) {
         if (!objectStore.autoIncrement || !objectStore.keyPath) {
             return data;
         }
@@ -189,12 +206,12 @@ export class IndexedDbManager {
         return data;
     }
 
-    private upgradeDatabase(upgradeDB: UpgradeDB, dbStore: IDbStore) {
-        if (upgradeDB.oldVersion < dbStore.version) {
+    private upgradeDatabase(db: IDBPDatabase, oldVersion: number, dbStore: IDbStore) {
+        if (oldVersion < dbStore.version) {
             if (dbStore.stores) {
                 for (var store of dbStore.stores) {
-                    if (!upgradeDB.objectStoreNames.contains(store.name)) {
-                        this.addNewStore(upgradeDB, store);
+                    if (!db.objectStoreNames.contains(store.name)) {
+                        this.addNewStore(db, store);
                         this.dotnetCallback(`store added ${store.name}: db version: ${dbStore.version}`);
                     }
                 }
@@ -202,14 +219,14 @@ export class IndexedDbManager {
         }
     }
 
-    private addNewStore(upgradeDB: UpgradeDB, store: IStoreSchema) {
+    private addNewStore(db: IDBPDatabase, store: IStoreSchema) {
         let primaryKey = store.primaryKey;
 
         if (!primaryKey) {
             primaryKey = { name: 'id', keyPath: 'id', auto: true };
         }
 
-        const newStore = upgradeDB.createObjectStore(store.name, { keyPath: primaryKey.keyPath, autoIncrement: primaryKey.auto });
+        const newStore = db.createObjectStore(store.name, { keyPath: primaryKey.keyPath, autoIncrement: primaryKey.auto });
 
         for (var index of store.indexes) {
             newStore.createIndex(index.name, index.keyPath, { unique: index.unique });
