@@ -237,6 +237,7 @@ namespace TG.Blazor.IndexedDB
 
             try
             {
+                await EnsureDbOpen();
                 var result =  await CallJavascript<string, string>(DbFunctions.ClearStore, storeName);
                 RaiseNotification(IndexDBActionOutCome.Successful, result);
             }
