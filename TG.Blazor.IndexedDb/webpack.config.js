@@ -5,7 +5,7 @@ module.exports = (env, args) =>({
     resolve: {
         extensions: ['.ts', '.js']
     },
-    devtool: 'none',
+    devtool: false,
     module: {
         rules: [
             {

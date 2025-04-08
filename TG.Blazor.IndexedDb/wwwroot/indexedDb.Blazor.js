@@ -1,131 +1,13 @@
-/******/ (function(modules) { // webpackBootstrap
-/******/ 	// The module cache
-/******/ 	var installedModules = {};
-/******/
-/******/ 	// The require function
-/******/ 	function __webpack_require__(moduleId) {
-/******/
-/******/ 		// Check if module is in cache
-/******/ 		if(installedModules[moduleId]) {
-/******/ 			return installedModules[moduleId].exports;
-/******/ 		}
-/******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = installedModules[moduleId] = {
-/******/ 			i: moduleId,
-/******/ 			l: false,
-/******/ 			exports: {}
-/******/ 		};
-/******/
-/******/ 		// Execute the module function
-/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
-/******/
-/******/ 		// Flag the module as loaded
-/******/ 		module.l = true;
-/******/
-/******/ 		// Return the exports of the module
-/******/ 		return module.exports;
-/******/ 	}
-/******/
-/******/
-/******/ 	// expose the modules object (__webpack_modules__)
-/******/ 	__webpack_require__.m = modules;
-/******/
-/******/ 	// expose the module cache
-/******/ 	__webpack_require__.c = installedModules;
-/******/
-/******/ 	// define getter function for harmony exports
-/******/ 	__webpack_require__.d = function(exports, name, getter) {
-/******/ 		if(!__webpack_require__.o(exports, name)) {
-/******/ 			Object.defineProperty(exports, name, { enumerable: true, get: getter });
-/******/ 		}
-/******/ 	};
-/******/
-/******/ 	// define __esModule on exports
-/******/ 	__webpack_require__.r = function(exports) {
-/******/ 		if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
-/******/ 			Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
-/******/ 		}
-/******/ 		Object.defineProperty(exports, '__esModule', { value: true });
-/******/ 	};
-/******/
-/******/ 	// create a fake namespace object
-/******/ 	// mode & 1: value is a module id, require it
-/******/ 	// mode & 2: merge all properties of value into the ns
-/******/ 	// mode & 4: return value when already ns object
-/******/ 	// mode & 8|1: behave like require
-/******/ 	__webpack_require__.t = function(value, mode) {
-/******/ 		if(mode & 1) value = __webpack_require__(value);
-/******/ 		if(mode & 8) return value;
-/******/ 		if((mode & 4) && typeof value === 'object' && value && value.__esModule) return value;
-/******/ 		var ns = Object.create(null);
-/******/ 		__webpack_require__.r(ns);
-/******/ 		Object.defineProperty(ns, 'default', { enumerable: true, value: value });
-/******/ 		if(mode & 2 && typeof value != 'string') for(var key in value) __webpack_require__.d(ns, key, function(key) { return value[key]; }.bind(null, key));
-/******/ 		return ns;
-/******/ 	};
-/******/
-/******/ 	// getDefaultExport function for compatibility with non-harmony modules
-/******/ 	__webpack_require__.n = function(module) {
-/******/ 		var getter = module && module.__esModule ?
-/******/ 			function getDefault() { return module['default']; } :
-/******/ 			function getModuleExports() { return module; };
-/******/ 		__webpack_require__.d(getter, 'a', getter);
-/******/ 		return getter;
-/******/ 	};
-/******/
-/******/ 	// Object.prototype.hasOwnProperty.call
-/******/ 	__webpack_require__.o = function(object, property) { return Object.prototype.hasOwnProperty.call(object, property); };
-/******/
-/******/ 	// __webpack_public_path__
-/******/ 	__webpack_require__.p = "";
-/******/
-/******/
-/******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = "./client/InitialiseIndexDbBlazor.ts");
-/******/ })
-/************************************************************************/
-/******/ ({
-
-/***/ "./client/InitialiseIndexDbBlazor.ts":
-/*!*******************************************!*\
-  !*** ./client/InitialiseIndexDbBlazor.ts ***!
-  \*******************************************/
-/*! no static exports found */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", { value: true });
-const indexedDbBlazor_1 = __webpack_require__(/*! ./indexedDbBlazor */ "./client/indexedDbBlazor.ts");
-var IndexDb;
-(function (IndexDb) {
-    const timeghostExtensions = 'TimeGhost';
-    const extensionObject = {
-        IndexedDbManager: new indexedDbBlazor_1.IndexedDbManager()
-    };
-    function initialise() {
-        if (typeof window !== 'undefined' && !window[timeghostExtensions]) {
-            window[timeghostExtensions] = Object.assign({}, extensionObject);
-        }
-        else {
-            window[timeghostExtensions] = Object.assign(Object.assign({}, window[timeghostExtensions]), extensionObject);
-        }
-    }
-    IndexDb.initialise = initialise;
-})(IndexDb || (IndexDb = {}));
-IndexDb.initialise();
-
-
-/***/ }),
+/******/ (() => { // webpackBootstrap
+/******/ 	"use strict";
+/******/ 	var __webpack_modules__ = ({
 
 /***/ "./client/indexedDbBlazor.ts":
 /*!***********************************!*\
   !*** ./client/indexedDbBlazor.ts ***!
   \***********************************/
-/*! no static exports found */
-/***/ (function(module, exports, __webpack_require__) {
+/***/ (function(__unused_webpack_module, exports, __webpack_require__) {
 
-"use strict";
 
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -136,7 +18,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-Object.defineProperty(exports, "__esModule", { value: true });
+Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.IndexedDbManager = void 0;
 const idb_1 = __webpack_require__(/*! idb */ "./node_modules/idb/build/index.js");
 class IndexedDbManager {
@@ -153,7 +35,7 @@ class IndexedDbManager {
                     if (this.dbInstance) {
                         this.dbInstance.close();
                     }
-                    this.dbInstance = yield idb_1.openDB(dbStore.dbName, dbStore.version, {
+                    this.dbInstance = yield (0, idb_1.openDB)(dbStore.dbName, dbStore.version, {
                         upgrade: (db, oldVersion, newVersion, transaction) => {
                             this.upgradeDatabase(db, oldVersion, dbStore);
                         }
@@ -161,13 +43,13 @@ class IndexedDbManager {
                 }
             }
             catch (e) {
-                this.dbInstance = yield idb_1.openDB(dbStore.dbName);
+                this.dbInstance = yield (0, idb_1.openDB)(dbStore.dbName);
             }
             return `IndexedDB ${data.dbName} opened`;
         });
         this.getDbInfo = (dbName) => __awaiter(this, void 0, void 0, function* () {
             if (!this.dbInstance) {
-                this.dbInstance = yield idb_1.openDB(dbName);
+                this.dbInstance = yield (0, idb_1.openDB)(dbName);
             }
             const currentDb = this.dbInstance;
             let getStoreNames = (list) => {
@@ -187,7 +69,7 @@ class IndexedDbManager {
             if (this.dbInstance) {
                 this.dbInstance.close();
             }
-            yield idb_1.deleteDB(dbName);
+            yield (0, idb_1.deleteDB)(dbName);
             this.dbInstance = undefined;
             return `The database ${dbName} has been deleted`;
         });
@@ -328,15 +210,15 @@ exports.IndexedDbManager = IndexedDbManager;
 /*!*****************************************!*\
   !*** ./node_modules/idb/build/index.js ***!
   \*****************************************/
-/*! exports provided: deleteDB, openDB, unwrap, wrap */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
+/***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
-"use strict";
 __webpack_require__.r(__webpack_exports__);
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "deleteDB", function() { return deleteDB; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "openDB", function() { return openDB; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "unwrap", function() { return unwrap; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "wrap", function() { return wrap; });
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   deleteDB: () => (/* binding */ deleteDB),
+/* harmony export */   openDB: () => (/* binding */ openDB),
+/* harmony export */   unwrap: () => (/* binding */ unwrap),
+/* harmony export */   wrap: () => (/* binding */ wrap)
+/* harmony export */ });
 const instanceOfAny = (object, constructors) => constructors.some((c) => object instanceof c);
 
 let idbProxyableTypes;
@@ -646,4 +528,91 @@ replaceTraps((oldTraps) => ({
 
 /***/ })
 
-/******/ });
+/******/ 	});
+/************************************************************************/
+/******/ 	// The module cache
+/******/ 	var __webpack_module_cache__ = {};
+/******/ 	
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/ 		// Check if module is in cache
+/******/ 		var cachedModule = __webpack_module_cache__[moduleId];
+/******/ 		if (cachedModule !== undefined) {
+/******/ 			return cachedModule.exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = __webpack_module_cache__[moduleId] = {
+/******/ 			// no module.id needed
+/******/ 			// no module.loaded needed
+/******/ 			exports: {}
+/******/ 		};
+/******/ 	
+/******/ 		// Execute the module function
+/******/ 		__webpack_modules__[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/ 	
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/ 	
+/************************************************************************/
+/******/ 	/* webpack/runtime/define property getters */
+/******/ 	(() => {
+/******/ 		// define getter functions for harmony exports
+/******/ 		__webpack_require__.d = (exports, definition) => {
+/******/ 			for(var key in definition) {
+/******/ 				if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
+/******/ 					Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 				}
+/******/ 			}
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/hasOwnProperty shorthand */
+/******/ 	(() => {
+/******/ 		__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ 	})();
+/******/ 	
+/******/ 	/* webpack/runtime/make namespace object */
+/******/ 	(() => {
+/******/ 		// define __esModule on exports
+/******/ 		__webpack_require__.r = (exports) => {
+/******/ 			if(typeof Symbol !== 'undefined' && Symbol.toStringTag) {
+/******/ 				Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+/******/ 			}
+/******/ 			Object.defineProperty(exports, '__esModule', { value: true });
+/******/ 		};
+/******/ 	})();
+/******/ 	
+/************************************************************************/
+var __webpack_exports__ = {};
+// This entry needs to be wrapped in an IIFE because it needs to be isolated against other modules in the chunk.
+(() => {
+var exports = __webpack_exports__;
+/*!*******************************************!*\
+  !*** ./client/InitialiseIndexDbBlazor.ts ***!
+  \*******************************************/
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+const indexedDbBlazor_1 = __webpack_require__(/*! ./indexedDbBlazor */ "./client/indexedDbBlazor.ts");
+var IndexDb;
+(function (IndexDb) {
+    const timeghostExtensions = 'TimeGhost';
+    const extensionObject = {
+        IndexedDbManager: new indexedDbBlazor_1.IndexedDbManager()
+    };
+    function initialise() {
+        if (typeof window !== 'undefined' && !window[timeghostExtensions]) {
+            window[timeghostExtensions] = Object.assign({}, extensionObject);
+        }
+        else {
+            window[timeghostExtensions] = Object.assign(Object.assign({}, window[timeghostExtensions]), extensionObject);
+        }
+    }
+    IndexDb.initialise = initialise;
+})(IndexDb || (IndexDb = {}));
+IndexDb.initialise();
+
+})();
+
+/******/ })()
+;
