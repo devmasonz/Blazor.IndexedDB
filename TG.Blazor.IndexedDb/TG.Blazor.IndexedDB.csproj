@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <RazorLangVersion>3.0</RazorLangVersion>
     <TypeScriptCompileBlocked>true</TypeScriptCompileBlocked>
     <TypeScriptToolsVersion>Latest</TypeScriptToolsVersion>
@@ -15,7 +15,7 @@
     <RepositoryType>GIT</RepositoryType>
     <Description>A Blazor library for interacting with IndexedDB</Description>
     <Copyright>Copyright 2019 William Tulloch</Copyright>
-    <PackageReleaseNotes>Updated to work with both server and client-side Blazor</PackageReleaseNotes>
+    <PackageReleaseNotes>Updated to work with .NET 9.0</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -41,8 +41,8 @@
 
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components" Version="3.1.5" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="3.1.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Components" Version="9.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.0" />
   </ItemGroup>
 
   <Target Name="EnsureNpmRestored" Condition="!Exists('node_modules') AND '$(Configuration)' == 'Debug'">
@@ -53,9 +53,6 @@
   <Target Name="RunWebpack" AfterTargets="ResolveReferences" Inputs="@(WebpackInputs)" Outputs="dist\indexedDb.Blazor.js" DependsOnTargets="EnsureNpmRestored" Condition="'$(Configuration)' == 'Debug'">
     <Exec Command="npm run build:debug" Condition="'$(Configuration)' == 'Debug'" />
     <Exec Command="npm run build:production" Condition="'$(Configuration)' != 'Debug'" />
-    <ItemGroup>
-      <Content Include="wwwroot\**\*.js" />
-    </ItemGroup>
   </Target>
 
  
