@@ -283,6 +283,8 @@ function cacheDonePromiseForTransaction(tx) {
             unlisten();
         };
         const error = () => {
+            console.error(tx);
+            console.error(tx.error);
             reject(tx.error || new DOMException('AbortError', 'AbortError'));
             unlisten();
         };
