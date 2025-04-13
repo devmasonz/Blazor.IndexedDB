@@ -279,7 +279,6 @@ function cacheDonePromiseForTransaction(tx) {
             tx.removeEventListener('abort', error);
         };
         const complete = () => {
-            console.log(tx);
             resolve();
             unlisten();
         };
