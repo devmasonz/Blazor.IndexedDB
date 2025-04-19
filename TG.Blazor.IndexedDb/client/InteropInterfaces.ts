@@ -18,14 +18,14 @@ export interface IStoreSchema {
 }
 /** */
 export interface IStoreRecord {
-    storename: string;
+    storeName: string;
     key?: any;
     data: any;
 }
 
 /**This used when querying a store using a predefined index*/
 export interface IIndexSearch {
-    storename: string;
+    storeName: string;
     indexName: string;
     queryValue: any;
     allMatching: boolean;

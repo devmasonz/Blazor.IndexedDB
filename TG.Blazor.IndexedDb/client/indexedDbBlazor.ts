@@ -69,7 +69,7 @@ export class IndexedDbManager {
     }
 
     public addRecord = async (record: IStoreRecord): Promise<string> => {
-        const stName = record.storename;
+        const stName = record.storeName;
         let itemToSave = record.data;
         
         if (!this.dbInstance) {
@@ -90,7 +90,7 @@ export class IndexedDbManager {
     }
 
     public updateRecord = async (record: IStoreRecord): Promise<string> => {
-        const stName = record.storename;
+        const stName = record.storeName;
         
         if (!this.dbInstance) {
             throw new Error("Database instance not initialized");
@@ -134,8 +134,8 @@ export class IndexedDbManager {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(searchData.storename, 'readonly');
-        const results = await tx.objectStore(searchData.storename)
+        const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+        const results = await tx.objectStore(searchData.storeName)
             .index(searchData.indexName)
             .get(searchData.queryValue);
 
@@ -148,8 +148,8 @@ export class IndexedDbManager {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(searchData.storename, 'readonly');
-        const index = tx.objectStore(searchData.storename).index(searchData.indexName);
+        const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+        const index = tx.objectStore(searchData.storeName).index(searchData.indexName);
         let results: any[] = [];
 
         // Using async iteration instead of iterateCursor (which was removed in idb 4.x)
@@ -165,24 +165,24 @@ export class IndexedDbManager {
         return results;
     }
 
-    public getRecordById = async (storename: string, id: any): Promise<any> => {
+    public getRecordById = async (storeName: string, id: any): Promise<any> => {
         if (!this.dbInstance) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(storename, 'readonly');
-        let result = await tx.objectStore(storename).get(id);
+        const tx = this.dbInstance.transaction(storeName, 'readonly');
+        let result = await tx.objectStore(storeName).get(id);
         await tx.done;
         return result;
     }
 
-    public deleteRecord = async (storename: string, id: any): Promise<string> => {
+    public deleteRecord = async (storeName: string, id: any): Promise<string> => {
         if (!this.dbInstance) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(storename, 'readwrite');
-        await tx.objectStore(storename).delete(id);
+        const tx = this.dbInstance.transaction(storeName, 'readwrite');
+        await tx.objectStore(storeName).delete(id);
         await tx.done;
 
         return `Record with id: ${id} deleted`;

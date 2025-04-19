@@ -74,7 +74,7 @@ class IndexedDbManager {
             return `The database ${dbName} has been deleted`;
         });
         this.addRecord = (record) => __awaiter(this, void 0, void 0, function* () {
-            const stName = record.storename;
+            const stName = record.storeName;
             let itemToSave = record.data;
             if (!this.dbInstance) {
                 throw new Error("Database instance not initialized");
@@ -89,7 +89,7 @@ class IndexedDbManager {
             return `Added new record with id ${result}`;
         });
         this.updateRecord = (record) => __awaiter(this, void 0, void 0, function* () {
-            const stName = record.storename;
+            const stName = record.storeName;
             if (!this.dbInstance) {
                 throw new Error("Database instance not initialized");
             }
@@ -122,8 +122,8 @@ class IndexedDbManager {
             if (!this.dbInstance) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(searchData.storename, 'readonly');
-            const results = yield tx.objectStore(searchData.storename)
+            const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+            const results = yield tx.objectStore(searchData.storeName)
                 .index(searchData.indexName)
                 .get(searchData.queryValue);
             yield tx.done;
@@ -133,8 +133,8 @@ class IndexedDbManager {
             if (!this.dbInstance) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(searchData.storename, 'readonly');
-            const index = tx.objectStore(searchData.storename).index(searchData.indexName);
+            const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+            const index = tx.objectStore(searchData.storeName).index(searchData.indexName);
             let results = [];
             let cursor = yield index.openCursor();
             while (cursor) {
@@ -146,21 +146,21 @@ class IndexedDbManager {
             yield tx.done;
             return results;
         });
-        this.getRecordById = (storename, id) => __awaiter(this, void 0, void 0, function* () {
+        this.getRecordById = (storeName, id) => __awaiter(this, void 0, void 0, function* () {
             if (!this.dbInstance) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(storename, 'readonly');
-            let result = yield tx.objectStore(storename).get(id);
+            const tx = this.dbInstance.transaction(storeName, 'readonly');
+            let result = yield tx.objectStore(storeName).get(id);
             yield tx.done;
             return result;
         });
-        this.deleteRecord = (storename, id) => __awaiter(this, void 0, void 0, function* () {
+        this.deleteRecord = (storeName, id) => __awaiter(this, void 0, void 0, function* () {
             if (!this.dbInstance) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(storename, 'readwrite');
-            yield tx.objectStore(storename).delete(id);
+            const tx = this.dbInstance.transaction(storeName, 'readwrite');
+            yield tx.objectStore(storeName).delete(id);
             yield tx.done;
             return `Record with id: ${id} deleted`;
         });

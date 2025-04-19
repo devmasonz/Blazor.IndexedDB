@@ -73,7 +73,7 @@ namespace TG.Blazor.IndexedDB
             {
                 _dbStore.Version = result.Version;
 
-                var currentStores = _dbStore.Stores.Select(s => s.Name);
+                var currentStores = _dbStore.Stores.Select(s => s.Name).ToList();
 
                 foreach (var storeName in result.StoreNames)
                 {
