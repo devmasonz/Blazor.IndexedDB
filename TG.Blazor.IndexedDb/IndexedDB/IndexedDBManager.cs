@@ -19,7 +19,7 @@ namespace TG.Blazor.IndexedDB
         /// <summary>
         /// A notification event that is raised when an action is completed
         /// </summary>
-        public event EventHandler<IndexedDBNotificationArgs> ActionCompleted;
+        public event EventHandler<IndexedDBNotificationArgs>? ActionCompleted;
 
         public IndexedDBManager(DbStore dbStore, IJSRuntime jsRuntime)
         {
@@ -80,7 +80,6 @@ namespace TG.Blazor.IndexedDB
                     if (!currentStores.Contains(storeName))
                     {
                         _dbStore.Stores.Add(new StoreSchema { DbVersion = result.Version, Name = storeName });
-
                     }
                 }
             }
@@ -158,7 +157,7 @@ namespace TG.Blazor.IndexedDB
         /// <typeparam name="TResult"></typeparam>
         /// <param name="storeName">The name of the store from which to retrieve the records</param>
         /// <returns></returns>
-        public async Task<List<TResult>> GetRecords<TResult>(string storeName)
+        public async Task<List<TResult>?> GetRecords<TResult>(string storeName)
         {
             await EnsureDbOpen();
             try
@@ -172,7 +171,7 @@ namespace TG.Blazor.IndexedDB
             catch (JSException jse)
             {
                 RaiseNotification(IndexDBActionOutCome.Failed, jse.Message);
-                return default;
+                return null;
             }
            
         }
@@ -185,10 +184,15 @@ namespace TG.Blazor.IndexedDB
         /// <param name="storeName">The name of the  store to retrieve the record from</param>
         /// <param name="id">the id of the record</param>
         /// <returns></returns>
-        public async Task<TResult> GetRecordById<TInput, TResult>(string storeName, TInput id)
+        public async Task<TResult?> GetRecordById<TInput, TResult>(string storeName, TInput id)
         {
+            if (id == null)
+            {
+                throw new ArgumentNullException(nameof(id), "The id parameter cannot be null.");
+            }
+            
             await EnsureDbOpen();
-
+            
             var data = new { Storename = storeName, Id = id };
             try
             {
@@ -212,6 +216,11 @@ namespace TG.Blazor.IndexedDB
         /// <returns></returns>
         public async Task DeleteRecord<TInput>(string storeName, TInput id)
         {
+            if (id == null)
+            {
+                throw new ArgumentNullException(nameof(id), "The id parameter cannot be null.");
+            }
+            
             try
             {
                 await CallJavascript<string>(DbFunctions.DeleteRecord, storeName, id);
@@ -256,7 +265,7 @@ namespace TG.Blazor.IndexedDB
         /// <typeparam name="TResult"></typeparam>
         /// <param name="searchQuery">an instance of StoreIndexQuery</param>
         /// <returns></returns>
-        public async Task<TResult> GetRecordByIndex<TInput, TResult>(StoreIndexQuery<TInput> searchQuery)
+        public async Task<TResult?> GetRecordByIndex<TInput, TResult>(StoreIndexQuery<TInput> searchQuery)
         {
             await EnsureDbOpen();
 
@@ -279,7 +288,7 @@ namespace TG.Blazor.IndexedDB
         /// <typeparam name="TResult"></typeparam>
         /// <param name="searchQuery"></param>
         /// <returns></returns>
-        public async Task<IList<TResult>> GetAllRecordsByIndex<TInput, TResult>(StoreIndexQuery<TInput> searchQuery)
+        public async Task<IList<TResult>?> GetAllRecordsByIndex<TInput, TResult>(StoreIndexQuery<TInput> searchQuery)
         {
             await EnsureDbOpen();
             try
@@ -292,7 +301,7 @@ namespace TG.Blazor.IndexedDB
             catch (JSException jse)
             {
                 RaiseNotification(IndexDBActionOutCome.Failed, jse.Message);
-                return default;
+                return null;
             }
         }
 

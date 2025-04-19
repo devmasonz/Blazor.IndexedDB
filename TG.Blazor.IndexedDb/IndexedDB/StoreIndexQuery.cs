@@ -9,12 +9,12 @@
         /// <summary>
         /// The name of store that the index query will run against
         /// </summary>
-        public string Storename { get; set; }
+        public required string StoreName { get; set; }
 
         /// <summary>
         /// The name of the index to use for the query
         /// </summary>
-        public string IndexName { get; set; }
+        public required string IndexName { get; set; }
        
         /// <summary>
         /// By default IndexedDB will only return the first match in an index query.
@@ -25,6 +25,6 @@
         /// <summary>
         /// The value to search for
         /// </summary>
-        public TInput QueryValue { get; set; }
+        public required TInput QueryValue { get; set; }
     }
 }

@@ -8,12 +8,12 @@
         /// <summary>
         /// The name of the index.
         /// </summary>
-        public string Name { get; set; }
+        public required string Name { get; set; }
         
         /// <summary>
         /// the identifier for the property in the object/record that is saved and is to be indexed.
         /// </summary>
-        public string KeyPath { get; set; }
+        public required string KeyPath { get; set; }
         /// <summary>
         /// defines whether the key value must be unique
         /// </summary>

@@ -16,6 +16,8 @@
     <Description>A Blazor library for interacting with IndexedDB</Description>
     <Copyright>Copyright 2019 William Tulloch</Copyright>
     <PackageReleaseNotes>Updated to work with .NET 9.0</PackageReleaseNotes>
+    <LangVersion>default</LangVersion>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
