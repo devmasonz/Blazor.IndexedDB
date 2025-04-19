@@ -11,7 +11,7 @@ namespace TG.Blazor.IndexedDB
         /// <summary>
         /// Name of the database to create
         /// </summary>
-        public required string DbName { get; set; }
+        public string DbName { get; }
         /// <summary>
         /// the version of the database. Increment the value when adding a new store.
         /// </summary>
@@ -21,5 +21,9 @@ namespace TG.Blazor.IndexedDB
         /// </summary>
         public List<StoreSchema> Stores { get; } = [];
 
+        public DbStore(string name)
+        {
+            DbName = name;
+        }
     }
 }

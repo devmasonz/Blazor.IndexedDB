@@ -15,7 +15,7 @@ namespace TG.Blazor.IndexedDB
         /// <returns></returns>
         public static IServiceCollection AddIndexedDB(this IServiceCollection services, Action<DbStore> options, string storeName)
         {
-            var dbStore = new DbStore() { DbName = storeName };
+            var dbStore = new DbStore(storeName);
             options(dbStore);
 
             services.TryAddSingleton(dbStore);
