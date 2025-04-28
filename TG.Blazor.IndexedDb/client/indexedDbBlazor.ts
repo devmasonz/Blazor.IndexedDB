@@ -4,7 +4,9 @@ import { IDbStore, IIndexSearch, IIndexSpec, IStoreRecord, IStoreSchema, IDotNet
 
 export class IndexedDbManager {
 
-    private dbInstance: IDBPDatabase<any> | undefined = undefined;
+    // Replace single dbInstance with a map of database instances
+    private dbInstances: Map<string, IDBPDatabase<any>> = new Map();
+    private currentDbName: string = '';
     private dotnetCallback = (message: string) => { };
 
     constructor() { }
@@ -17,29 +19,38 @@ export class IndexedDbManager {
         }
 
         try {
-            if (!this.dbInstance || this.dbInstance.version < dbStore.version) {
-                if (this.dbInstance) {
-                    this.dbInstance.close();
+            // Store the current database name for operations
+            this.currentDbName = dbStore.dbName;
+            
+            const existingDb = this.dbInstances.get(dbStore.dbName);
+            if (!existingDb || existingDb.version < dbStore.version) {
+                if (existingDb) {
+                    existingDb.close();
                 }
-                this.dbInstance = await openDB(dbStore.dbName, dbStore.version, {
+                const newDb = await openDB(dbStore.dbName, dbStore.version, {
                     upgrade: (db, oldVersion, newVersion, transaction) => {
                         this.upgradeDatabase(db, oldVersion, dbStore);
                     }
                 });
+                this.dbInstances.set(dbStore.dbName, newDb);
             }
         } catch (e) {
-            this.dbInstance = await openDB(dbStore.dbName);
+            const db = await openDB(dbStore.dbName);
+            this.dbInstances.set(dbStore.dbName, db);
         }
         
         return `IndexedDB ${data.dbName} opened`;
     }
 
     public getDbInfo = async (dbName: string) : Promise<IDbInformation> => {
-        if (!this.dbInstance) {
-            this.dbInstance = await openDB(dbName);
+        // Set the current database name
+        this.currentDbName = dbName;
+        
+        let db = this.dbInstances.get(dbName);
+        if (!db) {
+            db = await openDB(dbName);
+            this.dbInstances.set(dbName, db);
         }
-
-        const currentDb = this.dbInstance;
 
         let getStoreNames = (list: DOMStringList): string[] => {
             let names: string[] = [];
@@ -49,21 +60,25 @@ export class IndexedDbManager {
             return names;
         }
         const dbInfo: IDbInformation = {
-            version: currentDb.version,
-            storeNames: getStoreNames(currentDb.objectStoreNames)
+            version: db.version,
+            storeNames: getStoreNames(db.objectStoreNames)
         };
 
         return dbInfo;
     }
 
     public deleteDb = async(dbName: string): Promise<string> => {
-        if (this.dbInstance) {
-            this.dbInstance.close();
+        const db = this.dbInstances.get(dbName);
+        if (db) {
+            db.close();
+            this.dbInstances.delete(dbName);
         }
 
         await deleteDB(dbName);
 
-        this.dbInstance = undefined;
+        if (this.currentDbName === dbName) {
+            this.currentDbName = '';
+        }
 
         return `The database ${dbName} has been deleted`;
     }
@@ -72,11 +87,12 @@ export class IndexedDbManager {
         const stName = record.storeName;
         let itemToSave = record.data;
         
-        if (!this.dbInstance) {
+        const db = this.getCurrentDb();
+        if (!db) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(stName, 'readwrite');
+        const tx = db.transaction(stName, 'readwrite');
         const objectStore = tx.objectStore(stName);
 
         itemToSave = this.checkForKeyPath(objectStore, itemToSave);
@@ -92,11 +108,12 @@ export class IndexedDbManager {
     public updateRecord = async (record: IStoreRecord): Promise<string> => {
         const stName = record.storeName;
         
-        if (!this.dbInstance) {
+        const db = this.getCurrentDb();
+        if (!db) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(stName, 'readwrite');
+        const tx = db.transaction(stName, 'readwrite');
         const result = record.key ? 
             await tx.objectStore(stName).put(record.data, record.key) : 
             await tx.objectStore(stName).put(record.data);
@@ -106,11 +123,12 @@ export class IndexedDbManager {
     }
 
     public getRecords = async (storeName: string): Promise<any> => {
-        if (!this.dbInstance) {
+        const db = this.getCurrentDb();
+        if (!db) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(storeName, 'readonly');
+        const tx = db.transaction(storeName, 'readonly');
         const results = await tx.objectStore(storeName).getAll();
         await tx.done;
 
@@ -118,11 +136,12 @@ export class IndexedDbManager {
     }
 
     public clearStore = async (storeName: string): Promise<string> => {
-        if (!this.dbInstance) {
+        const db = this.getCurrentDb();
+        if (!db) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(storeName, 'readwrite');
+        const tx = db.transaction(storeName, 'readwrite');
         await tx.objectStore(storeName).clear();
         await tx.done;
 
@@ -130,11 +149,12 @@ export class IndexedDbManager {
     }
 
     public getRecordByIndex = async (searchData: IIndexSearch): Promise<any> => {
-        if (!this.dbInstance) {
+        const db = this.getCurrentDb();
+        if (!db) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+        const tx = db.transaction(searchData.storeName, 'readonly');
         const results = await tx.objectStore(searchData.storeName)
             .index(searchData.indexName)
             .get(searchData.queryValue);
@@ -144,11 +164,12 @@ export class IndexedDbManager {
     }
 
     public getAllRecordsByIndex = async (searchData: IIndexSearch): Promise<any> => {
-        if (!this.dbInstance) {
+        const db = this.getCurrentDb();
+        if (!db) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+        const tx = db.transaction(searchData.storeName, 'readonly');
         const index = tx.objectStore(searchData.storeName).index(searchData.indexName);
         let results: any[] = [];
 
@@ -166,26 +187,33 @@ export class IndexedDbManager {
     }
 
     public getRecordById = async (storeName: string, id: any): Promise<any> => {
-        if (!this.dbInstance) {
+        const db = this.getCurrentDb();
+        if (!db) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(storeName, 'readonly');
+        const tx = db.transaction(storeName, 'readonly');
         let result = await tx.objectStore(storeName).get(id);
         await tx.done;
         return result;
     }
 
     public deleteRecord = async (storeName: string, id: any): Promise<string> => {
-        if (!this.dbInstance) {
+        const db = this.getCurrentDb();
+        if (!db) {
             throw new Error("Database instance not initialized");
         }
         
-        const tx = this.dbInstance.transaction(storeName, 'readwrite');
+        const tx = db.transaction(storeName, 'readwrite');
         await tx.objectStore(storeName).delete(id);
         await tx.done;
 
         return `Record with id: ${id} deleted`;
+    }
+
+    // Helper method to get the current database instance
+    private getCurrentDb(): IDBPDatabase<any> | undefined {
+        return this.dbInstances.get(this.currentDbName);
     }
 
     // Currently don't support aggregate keys

@@ -223,6 +223,7 @@ namespace TG.Blazor.IndexedDB
             
             try
             {
+                await EnsureDbOpen();
                 await CallJavascript<string>(DbFunctions.DeleteRecord, storeName, id);
                 RaiseNotification(IndexDBActionOutCome.Deleted, $"Deleted from {storeName} record: {id}");
             }
@@ -321,9 +322,20 @@ namespace TG.Blazor.IndexedDB
             return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", args);
         }
 
+        /// <summary>
+        /// Ensures the database is open and sets the correct database context
+        /// </summary>
         private async Task EnsureDbOpen()
         {
-            if (!_isOpen) await OpenDb();
+            if (!_isOpen) 
+            {
+                await OpenDb();
+            }
+            else 
+            {
+                // Set the database context in JavaScript for subsequent operations
+                await _jsRuntime.InvokeVoidAsync($"{InteropPrefix}.getDbInfo", _dbStore.DbName);
+            }
         }
 
         private void RaiseNotification(IndexDBActionOutCome outcome, string message)

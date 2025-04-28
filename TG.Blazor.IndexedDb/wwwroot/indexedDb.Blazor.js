@@ -23,7 +23,8 @@ exports.IndexedDbManager = void 0;
 const idb_1 = __webpack_require__(/*! idb */ "./node_modules/idb/build/index.js");
 class IndexedDbManager {
     constructor() {
-        this.dbInstance = undefined;
+        this.dbInstances = new Map();
+        this.currentDbName = '';
         this.dotnetCallback = (message) => { };
         this.openDb = (data, instanceWrapper) => __awaiter(this, void 0, void 0, function* () {
             const dbStore = data;
@@ -31,27 +32,33 @@ class IndexedDbManager {
                 instanceWrapper.instance.invokeMethodAsync(instanceWrapper.methodName, message);
             };
             try {
-                if (!this.dbInstance || this.dbInstance.version < dbStore.version) {
-                    if (this.dbInstance) {
-                        this.dbInstance.close();
+                this.currentDbName = dbStore.dbName;
+                const existingDb = this.dbInstances.get(dbStore.dbName);
+                if (!existingDb || existingDb.version < dbStore.version) {
+                    if (existingDb) {
+                        existingDb.close();
                     }
-                    this.dbInstance = yield (0, idb_1.openDB)(dbStore.dbName, dbStore.version, {
+                    const newDb = yield (0, idb_1.openDB)(dbStore.dbName, dbStore.version, {
                         upgrade: (db, oldVersion, newVersion, transaction) => {
                             this.upgradeDatabase(db, oldVersion, dbStore);
                         }
                     });
+                    this.dbInstances.set(dbStore.dbName, newDb);
                 }
             }
             catch (e) {
-                this.dbInstance = yield (0, idb_1.openDB)(dbStore.dbName);
+                const db = yield (0, idb_1.openDB)(dbStore.dbName);
+                this.dbInstances.set(dbStore.dbName, db);
             }
             return `IndexedDB ${data.dbName} opened`;
         });
         this.getDbInfo = (dbName) => __awaiter(this, void 0, void 0, function* () {
-            if (!this.dbInstance) {
-                this.dbInstance = yield (0, idb_1.openDB)(dbName);
+            this.currentDbName = dbName;
+            let db = this.dbInstances.get(dbName);
+            if (!db) {
+                db = yield (0, idb_1.openDB)(dbName);
+                this.dbInstances.set(dbName, db);
             }
-            const currentDb = this.dbInstance;
             let getStoreNames = (list) => {
                 let names = [];
                 for (var i = 0; i < list.length; i++) {
@@ -60,26 +67,31 @@ class IndexedDbManager {
                 return names;
             };
             const dbInfo = {
-                version: currentDb.version,
-                storeNames: getStoreNames(currentDb.objectStoreNames)
+                version: db.version,
+                storeNames: getStoreNames(db.objectStoreNames)
             };
             return dbInfo;
         });
         this.deleteDb = (dbName) => __awaiter(this, void 0, void 0, function* () {
-            if (this.dbInstance) {
-                this.dbInstance.close();
+            const db = this.dbInstances.get(dbName);
+            if (db) {
+                db.close();
+                this.dbInstances.delete(dbName);
             }
             yield (0, idb_1.deleteDB)(dbName);
-            this.dbInstance = undefined;
+            if (this.currentDbName === dbName) {
+                this.currentDbName = '';
+            }
             return `The database ${dbName} has been deleted`;
         });
         this.addRecord = (record) => __awaiter(this, void 0, void 0, function* () {
             const stName = record.storeName;
             let itemToSave = record.data;
-            if (!this.dbInstance) {
+            const db = this.getCurrentDb();
+            if (!db) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(stName, 'readwrite');
+            const tx = db.transaction(stName, 'readwrite');
             const objectStore = tx.objectStore(stName);
             itemToSave = this.checkForKeyPath(objectStore, itemToSave);
             const result = record.key ?
@@ -90,10 +102,11 @@ class IndexedDbManager {
         });
         this.updateRecord = (record) => __awaiter(this, void 0, void 0, function* () {
             const stName = record.storeName;
-            if (!this.dbInstance) {
+            const db = this.getCurrentDb();
+            if (!db) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(stName, 'readwrite');
+            const tx = db.transaction(stName, 'readwrite');
             const result = record.key ?
                 yield tx.objectStore(stName).put(record.data, record.key) :
                 yield tx.objectStore(stName).put(record.data);
@@ -101,28 +114,31 @@ class IndexedDbManager {
             return `updated record with id ${result}`;
         });
         this.getRecords = (storeName) => __awaiter(this, void 0, void 0, function* () {
-            if (!this.dbInstance) {
+            const db = this.getCurrentDb();
+            if (!db) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(storeName, 'readonly');
+            const tx = db.transaction(storeName, 'readonly');
             const results = yield tx.objectStore(storeName).getAll();
             yield tx.done;
             return results;
         });
         this.clearStore = (storeName) => __awaiter(this, void 0, void 0, function* () {
-            if (!this.dbInstance) {
+            const db = this.getCurrentDb();
+            if (!db) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(storeName, 'readwrite');
+            const tx = db.transaction(storeName, 'readwrite');
             yield tx.objectStore(storeName).clear();
             yield tx.done;
             return `Store ${storeName} cleared`;
         });
         this.getRecordByIndex = (searchData) => __awaiter(this, void 0, void 0, function* () {
-            if (!this.dbInstance) {
+            const db = this.getCurrentDb();
+            if (!db) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+            const tx = db.transaction(searchData.storeName, 'readonly');
             const results = yield tx.objectStore(searchData.storeName)
                 .index(searchData.indexName)
                 .get(searchData.queryValue);
@@ -130,10 +146,11 @@ class IndexedDbManager {
             return results;
         });
         this.getAllRecordsByIndex = (searchData) => __awaiter(this, void 0, void 0, function* () {
-            if (!this.dbInstance) {
+            const db = this.getCurrentDb();
+            if (!db) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+            const tx = db.transaction(searchData.storeName, 'readonly');
             const index = tx.objectStore(searchData.storeName).index(searchData.indexName);
             let results = [];
             let cursor = yield index.openCursor();
@@ -147,23 +164,28 @@ class IndexedDbManager {
             return results;
         });
         this.getRecordById = (storeName, id) => __awaiter(this, void 0, void 0, function* () {
-            if (!this.dbInstance) {
+            const db = this.getCurrentDb();
+            if (!db) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(storeName, 'readonly');
+            const tx = db.transaction(storeName, 'readonly');
             let result = yield tx.objectStore(storeName).get(id);
             yield tx.done;
             return result;
         });
         this.deleteRecord = (storeName, id) => __awaiter(this, void 0, void 0, function* () {
-            if (!this.dbInstance) {
+            const db = this.getCurrentDb();
+            if (!db) {
                 throw new Error("Database instance not initialized");
             }
-            const tx = this.dbInstance.transaction(storeName, 'readwrite');
+            const tx = db.transaction(storeName, 'readwrite');
             yield tx.objectStore(storeName).delete(id);
             yield tx.done;
             return `Record with id: ${id} deleted`;
         });
+    }
+    getCurrentDb() {
+        return this.dbInstances.get(this.currentDbName);
     }
     checkForKeyPath(objectStore, data) {
         if (!objectStore.autoIncrement || !objectStore.keyPath) {
