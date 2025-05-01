@@ -32,6 +32,25 @@ namespace TG.Blazor.IndexedDB
         public string DbName => _dbStore.DbName;
         
         /// <summary>
+        /// Gets a list of all IndexedDB database names available in the browser
+        /// </summary>
+        /// <returns>A list of database names</returns>
+        public async Task<List<string>> GetAllDatabaseNames()
+        {
+            try
+            {
+                var databaseNames = await CallJavascript<List<string>>(DbFunctions.GetAllDatabaseNames);
+                RaiseNotification(IndexDBActionOutCome.Successful, $"Retrieved {databaseNames.Count} database names");
+                return databaseNames;
+            }
+            catch (JSException jse)
+            {
+                RaiseNotification(IndexDBActionOutCome.Failed, jse.Message);
+                return new List<string>();
+            }
+        }
+        
+        /// <summary>
         /// Opens the IndexedDB defined in the DbStore. Under the covers will create the database if it does not exist
         /// and create the stores defined in DbStore.
         /// </summary>

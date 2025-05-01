@@ -183,6 +183,21 @@ class IndexedDbManager {
             yield tx.done;
             return `Record with id: ${id} deleted`;
         });
+        this.getAllDatabaseNames = () => __awaiter(this, void 0, void 0, function* () {
+            if ('databases' in indexedDB) {
+                try {
+                    const databases = yield indexedDB.databases();
+                    return databases.map(db => db.name).filter(name => name !== null);
+                }
+                catch (e) {
+                    console.error('Error getting database names:', e);
+                    return [];
+                }
+            }
+            else {
+                return Array.from(this.dbInstances.keys());
+            }
+        });
     }
     getCurrentDb() {
         return this.dbInstances.get(this.currentDbName);

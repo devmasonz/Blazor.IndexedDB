@@ -211,6 +211,22 @@ export class IndexedDbManager {
         return `Record with id: ${id} deleted`;
     }
 
+    public getAllDatabaseNames = async (): Promise<string[]> => {
+        // Use indexedDB.databases() where available (modern browsers)
+        if ('databases' in indexedDB) {
+            try {
+                const databases = await indexedDB.databases();
+                return databases.map(db => db.name).filter(name => name !== null) as string[];
+            } catch (e) {
+                console.error('Error getting database names:', e);
+                return [];
+            }
+        } else {
+            // Return only known databases for older browsers
+            return Array.from(this.dbInstances.keys());
+        }
+    }
+
     // Helper method to get the current database instance
     private getCurrentDb(): IDBPDatabase<any> | undefined {
         return this.dbInstances.get(this.currentDbName);
