@@ -227,6 +227,69 @@ export class IndexedDbManager {
         }
     }
 
+    public renameStore = async (oldName: string, newName: string): Promise<string> => {
+        const db = this.getCurrentDb();
+        if (!db) {
+            throw new Error("Database instance not initialized");
+        }
+        
+        // IDBPDatabase doesn't have renameObjectStore method
+        // We need to create a new store with the new name and copy data
+        const tx = db.transaction(oldName, 'readwrite');
+        const oldStore = tx.objectStore(oldName);
+        
+        // Get all data from old store
+        const allData = await oldStore.getAll();
+        await tx.done;
+        
+        // Create new store and delete old one in a versionchange transaction
+        const newVersion = db.version + 1;
+        await db.close();
+        
+        const upgradedDb = await openDB(this.currentDbName, newVersion, {
+            upgrade(database, oldVersion, newVersion, transaction) {
+                // Get old store's configuration
+                const oldStoreConfig = database.objectStoreNames.contains(oldName) ? 
+                    transaction.objectStore(oldName) : null;
+                
+                if (oldStoreConfig) {
+                    // Create new store with same configuration
+                    const newStore = database.createObjectStore(newName, {
+                        keyPath: oldStoreConfig.keyPath,
+                        autoIncrement: oldStoreConfig.autoIncrement
+                    });
+                    
+                    // Recreate indexes
+                    for (const indexName of oldStoreConfig.indexNames) {
+                        const index = oldStoreConfig.index(indexName);
+                        newStore.createIndex(indexName, index.keyPath, {
+                            unique: index.unique,
+                            multiEntry: index.multiEntry
+                        });
+                    }
+                    
+                    // Delete old store
+                    database.deleteObjectStore(oldName);
+                }
+            }
+        });
+        
+        // Add data to new store
+        if (allData.length > 0) {
+            const newTx = upgradedDb.transaction(newName, 'readwrite');
+            const newStore = newTx.objectStore(newName);
+            for (const item of allData) {
+                await newStore.add(item);
+            }
+            await newTx.done;
+        }
+        
+        // Update the database instance in our map
+        this.dbInstances.set(this.currentDbName, upgradedDb);
+        
+        return `Store ${oldName} renamed to ${newName}`;
+    }
+
     // Helper method to get the current database instance
     private getCurrentDb(): IDBPDatabase<any> | undefined {
         return this.dbInstances.get(this.currentDbName);

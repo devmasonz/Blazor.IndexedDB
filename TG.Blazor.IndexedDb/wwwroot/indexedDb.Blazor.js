@@ -198,6 +198,48 @@ class IndexedDbManager {
                 return Array.from(this.dbInstances.keys());
             }
         });
+        this.renameStore = (oldName, newName) => __awaiter(this, void 0, void 0, function* () {
+            const db = this.getCurrentDb();
+            if (!db) {
+                throw new Error("Database instance not initialized");
+            }
+            const tx = db.transaction(oldName, 'readwrite');
+            const oldStore = tx.objectStore(oldName);
+            const allData = yield oldStore.getAll();
+            yield tx.done;
+            const newVersion = db.version + 1;
+            yield db.close();
+            const upgradedDb = yield (0, idb_1.openDB)(this.currentDbName, newVersion, {
+                upgrade(database, oldVersion, newVersion, transaction) {
+                    const oldStoreConfig = database.objectStoreNames.contains(oldName) ?
+                        transaction.objectStore(oldName) : null;
+                    if (oldStoreConfig) {
+                        const newStore = database.createObjectStore(newName, {
+                            keyPath: oldStoreConfig.keyPath,
+                            autoIncrement: oldStoreConfig.autoIncrement
+                        });
+                        for (const indexName of oldStoreConfig.indexNames) {
+                            const index = oldStoreConfig.index(indexName);
+                            newStore.createIndex(indexName, index.keyPath, {
+                                unique: index.unique,
+                                multiEntry: index.multiEntry
+                            });
+                        }
+                        database.deleteObjectStore(oldName);
+                    }
+                }
+            });
+            if (allData.length > 0) {
+                const newTx = upgradedDb.transaction(newName, 'readwrite');
+                const newStore = newTx.objectStore(newName);
+                for (const item of allData) {
+                    yield newStore.add(item);
+                }
+                yield newTx.done;
+            }
+            this.dbInstances.set(this.currentDbName, upgradedDb);
+            return `Store ${oldName} renamed to ${newName}`;
+        });
     }
     getCurrentDb() {
         return this.dbInstances.get(this.currentDbName);

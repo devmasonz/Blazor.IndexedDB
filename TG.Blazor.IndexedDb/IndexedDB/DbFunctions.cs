@@ -18,5 +18,6 @@
         public const string GetAllRecordsByIndex = "getAllRecordsByIndex";
         public const string GetDbInfo = "getDbInfo";
         public const string GetAllDatabaseNames = "getAllDatabaseNames";
+        public const string RenameStore = "renameStore";
     }
 }

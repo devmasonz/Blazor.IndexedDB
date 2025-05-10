@@ -49,6 +49,11 @@ namespace TG.Blazor.IndexedDB
                 return new List<string>();
             }
         }
+
+        public async Task RenameStore(string oldName, string newName)
+        {
+            await CallJavascript<string>(DbFunctions.RenameStore, oldName, newName);
+        }
         
         /// <summary>
         /// Opens the IndexedDB defined in the DbStore. Under the covers will create the database if it does not exist
