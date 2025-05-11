@@ -237,7 +237,8 @@ class IndexedDbManager {
                 }
                 yield newTx.done;
             }
-            this.dbInstances.set(this.currentDbName, upgradedDb);
+            this.dbInstances.delete(oldName);
+            this.dbInstances.set(newName, upgradedDb);
             return `Store ${oldName} renamed to ${newName}`;
         });
     }

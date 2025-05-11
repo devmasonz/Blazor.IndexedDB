@@ -52,6 +52,7 @@ namespace TG.Blazor.IndexedDB
 
         public async Task RenameStore(string oldName, string newName)
         {
+            await EnsureDbOpen();
             await CallJavascript<string>(DbFunctions.RenameStore, oldName, newName);
         }
         

@@ -284,8 +284,9 @@ export class IndexedDbManager {
             await newTx.done;
         }
         
-        // Update the database instance in our map
-        this.dbInstances.set(this.currentDbName, upgradedDb);
+        // remove the database instance in our map and add the new one
+        this.dbInstances.delete(oldName);
+        this.dbInstances.set(newName, upgradedDb);
         
         return `Store ${oldName} renamed to ${newName}`;
     }
