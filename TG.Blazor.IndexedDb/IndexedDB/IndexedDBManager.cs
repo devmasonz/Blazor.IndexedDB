@@ -7,14 +7,17 @@ using Microsoft.JSInterop;
 namespace TG.Blazor.IndexedDB
 {
     /// <summary>
-    /// Provides functionality for accessing IndexedDB from Blazor application
+    /// Provides functionality for accessing IndexedDB from Blazor application.
+    /// Each instance maintains a connection to a single database.
     /// </summary>
-    public class IndexedDBManager
+    public class IndexedDBManager : IAsyncDisposable
     {
         private readonly DbStore _dbStore;
         private readonly IJSRuntime _jsRuntime;
         private const string InteropPrefix = "TimeGhost.IndexedDbManager";
         private bool _isOpen;
+        private string _currentDbName;
+        private DotNetObjectReference<IndexedDBManager>? _dotNetRef;
 
         /// <summary>
         /// A notification event that is raised when an action is completed
@@ -25,6 +28,8 @@ namespace TG.Blazor.IndexedDB
         {
             _dbStore = dbStore;
             _jsRuntime = jsRuntime;
+            _currentDbName = dbStore.DbName;
+            _dotNetRef = DotNetObjectReference.Create(this);
         }
 
         public List<StoreSchema> Stores => _dbStore.Stores;
@@ -53,7 +58,7 @@ namespace TG.Blazor.IndexedDB
         public async Task RenameStore(string oldName, string newName)
         {
             await EnsureDbOpen();
-            await CallJavascript<string>(DbFunctions.RenameStore, oldName, newName);
+            await CallJavascript<string>(DbFunctions.RenameStore, oldName, newName, _dotNetRef);
         }
         
         /// <summary>
@@ -63,11 +68,16 @@ namespace TG.Blazor.IndexedDB
         /// <returns></returns>
         public async Task OpenDb()
         {
-            var result = await CallJavascript<string>(DbFunctions.OpenDb, _dbStore, new { Instance = DotNetObjectReference.Create(this), MethodName= "Callback"});
+            if (_isOpen && _currentDbName == _dbStore.DbName)
+            {
+                return;
+            }
+
+            var result = await CallJavascript<string>(DbFunctions.OpenDb, _dbStore, new { Instance = _dotNetRef, MethodName= "Callback"});
             _isOpen = true;
+            _currentDbName = _dbStore.DbName;
 
-
-           await GetCurrentDbState();
+            await GetCurrentDbState();
 
             RaiseNotification(IndexDBActionOutCome.Successful, result);
         }
@@ -83,7 +93,15 @@ namespace TG.Blazor.IndexedDB
             {
                 throw new ArgumentException("dbName cannot be null or empty", nameof(dbName));
             }
+            
             var result = await CallJavascript<string>(DbFunctions.DeleteDb, dbName);
+
+            // Reset state if we deleted our current database
+            if (dbName == _currentDbName)
+            {
+                _isOpen = false;
+                _currentDbName = _dbStore.DbName;
+            }
 
             RaiseNotification(IndexDBActionOutCome.Successful, result);
         }
@@ -92,7 +110,7 @@ namespace TG.Blazor.IndexedDB
         {
             await EnsureDbOpen();
 
-            var result = await CallJavascript<DbInformation>(DbFunctions.GetDbInfo, _dbStore.DbName);
+            var result = await CallJavascript<DbInformation>(DbFunctions.GetDbInfo, _dbStore.DbName, _dotNetRef);
 
             if (result.Version > _dbStore.Version)
             {
@@ -130,7 +148,9 @@ namespace TG.Blazor.IndexedDB
             _dbStore.Stores.Add(storeSchema);
             _dbStore.Version += 1;
 
-            var result = await CallJavascript<string>(DbFunctions.OpenDb, _dbStore, new { Instance = DotNetObjectReference.Create(this), MethodName = "Callback" });
+            // Force reopen with new version
+            _isOpen = false;
+            var result = await CallJavascript<string>(DbFunctions.OpenDb, _dbStore, new { Instance = _dotNetRef, MethodName = "Callback" });
             _isOpen = true;
 
             RaiseNotification(IndexDBActionOutCome.Successful, $"new store {storeSchema.Name} added");
@@ -147,7 +167,7 @@ namespace TG.Blazor.IndexedDB
             await EnsureDbOpen();
             try
             {
-                var result = await CallJavascript<StoreRecord<T>, string>(DbFunctions.AddRecord, recordToAdd);
+                var result = await CallJavascript<StoreRecord<T>, string>(DbFunctions.AddRecord, recordToAdd, _dotNetRef);
                 RaiseNotification(IndexDBActionOutCome.Successful, result);
             }
             catch (JSException e)
@@ -167,7 +187,7 @@ namespace TG.Blazor.IndexedDB
             await EnsureDbOpen();
             try
             {
-                var result = await CallJavascript<StoreRecord<T>, string>(DbFunctions.UpdateRecord, recordToUpdate);
+                var result = await CallJavascript<StoreRecord<T>, string>(DbFunctions.UpdateRecord, recordToUpdate, _dotNetRef);
                 RaiseNotification(IndexDBActionOutCome.Successful, result);
             }
             catch (JSException jse)
@@ -187,7 +207,7 @@ namespace TG.Blazor.IndexedDB
             await EnsureDbOpen();
             try
             {
-                var results = await CallJavascript<List<TResult>>(DbFunctions.GetRecords, storeName);
+                var results = await CallJavascript<List<TResult>>(DbFunctions.GetRecords, storeName, _dotNetRef);
 
                 RaiseNotification(IndexDBActionOutCome.Successful, $"Retrieved {results.Count} records from {storeName}");
 
@@ -218,10 +238,9 @@ namespace TG.Blazor.IndexedDB
             
             await EnsureDbOpen();
             
-            var data = new { Storename = storeName, Id = id };
             try
             {
-                var record = await CallJavascript<TResult>(DbFunctions.GetRecordById, storeName, id);
+                var record = await CallJavascript<TResult>(DbFunctions.GetRecordById, storeName, id, _dotNetRef);
 
                 return record;
             }
@@ -249,7 +268,7 @@ namespace TG.Blazor.IndexedDB
             try
             {
                 await EnsureDbOpen();
-                await CallJavascript<string>(DbFunctions.DeleteRecord, storeName, id);
+                await CallJavascript<string>(DbFunctions.DeleteRecord, storeName, id, _dotNetRef);
                 RaiseNotification(IndexDBActionOutCome.Deleted, $"Deleted from {storeName} record: {id}");
             }
             catch (JSException jse)
@@ -273,7 +292,7 @@ namespace TG.Blazor.IndexedDB
             try
             {
                 await EnsureDbOpen();
-                var result =  await CallJavascript<string, string>(DbFunctions.ClearStore, storeName);
+                var result = await CallJavascript<string>(DbFunctions.ClearStore, storeName, _dotNetRef);
                 RaiseNotification(IndexDBActionOutCome.Successful, result);
             }
             catch (JSException jse)
@@ -297,7 +316,7 @@ namespace TG.Blazor.IndexedDB
 
             try
             {
-                var result = await CallJavascript<StoreIndexQuery<TInput>, TResult>(DbFunctions.GetRecordByIndex, searchQuery);
+                var result = await CallJavascript<StoreIndexQuery<TInput>, TResult>(DbFunctions.GetRecordByIndex, searchQuery, _dotNetRef);
                 return result;
             }
             catch (JSException jse)
@@ -319,7 +338,7 @@ namespace TG.Blazor.IndexedDB
             await EnsureDbOpen();
             try
             {
-                var results = await CallJavascript<StoreIndexQuery<TInput>, IList<TResult>>(DbFunctions.GetAllRecordsByIndex, searchQuery);
+                var results = await CallJavascript<StoreIndexQuery<TInput>, IList<TResult>>(DbFunctions.GetAllRecordsByIndex, searchQuery, _dotNetRef);
                 RaiseNotification(IndexDBActionOutCome.Successful, 
                     $"Retrieved {results.Count} records, for {searchQuery.QueryValue} on index {searchQuery.IndexName}");
                 return results;
@@ -337,9 +356,16 @@ namespace TG.Blazor.IndexedDB
             Console.WriteLine($"called from JS: {message}");
         }
         
-        private async Task<TResult> CallJavascript<TData, TResult>(string functionName, TData data)
+        private async Task<TResult> CallJavascript<TData, TResult>(string functionName, TData data, DotNetObjectReference<IndexedDBManager>? dotNetRef = null)
         {
-            return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", data);
+            if (dotNetRef != null)
+            {
+                return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", data, dotNetRef);
+            }
+            else
+            {
+                return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", data);
+            }
         }
 
         private async Task<TResult> CallJavascript<TResult>(string functionName, params object[] args)
@@ -352,20 +378,32 @@ namespace TG.Blazor.IndexedDB
         /// </summary>
         private async Task EnsureDbOpen()
         {
-            if (!_isOpen) 
+            if (!_isOpen || _currentDbName != _dbStore.DbName)
             {
                 await OpenDb();
-            }
-            else 
-            {
-                // Set the database context in JavaScript for subsequent operations
-                await _jsRuntime.InvokeVoidAsync($"{InteropPrefix}.getDbInfo", _dbStore.DbName);
             }
         }
 
         private void RaiseNotification(IndexDBActionOutCome outcome, string message)
         {
-            ActionCompleted?.Invoke(this, new IndexedDBNotificationArgs { Outcome = outcome, Message = message });
+            ActionCompleted?.Invoke(this, new IndexedDBNotificationArgs
+            {
+                Outcome = outcome,
+                Message = message
+            });
+        }
+        
+        /// <summary>
+        /// Called when the instance is disposed
+        /// </summary>
+        public async ValueTask DisposeAsync()
+        {
+            if (_dotNetRef != null)
+            {
+                _dotNetRef.Dispose();
+                _dotNetRef = null;
+            }
+            await Task.CompletedTask;
         }
     }
 }
