@@ -49,5 +49,13 @@ export interface IDbInformation {
     storeNames: string[];
 }
 
+/**Error information to be passed to .NET */
+export interface IIndexedDbError {
+    message: string;
+    stack?: string;
+    name: string;
+    code?: number;
+}
+
 
 

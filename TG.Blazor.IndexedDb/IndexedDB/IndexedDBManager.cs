@@ -7,6 +7,22 @@ using Microsoft.JSInterop;
 namespace TG.Blazor.IndexedDB
 {
     /// <summary>
+    /// Custom exception for IndexedDB operations
+    /// </summary>
+    public class IndexedDbException : Exception
+    {
+        public string ErrorName { get; }
+        public int? ErrorCode { get; }
+
+        public IndexedDbException(string message, string name, int? code = null, string? stack = null)
+            : base($"{name}: {message}{(stack != null ? Environment.NewLine + stack : string.Empty)}")
+        {
+            ErrorName = name;
+            ErrorCode = code;
+        }
+    }
+
+    /// <summary>
     /// Provides functionality for accessing IndexedDB from Blazor application.
     /// Each instance maintains a connection to a single database.
     /// </summary>
@@ -356,21 +372,87 @@ namespace TG.Blazor.IndexedDB
             Console.WriteLine($"called from JS: {message}");
         }
         
+        [JSInvokable("ErrorCallback")]
+        public void ErrorFromJS(object errorData)
+        {
+            try
+            {
+                var errorName = "Unknown";
+                var errorMessage = "Unknown error";
+                int? errorCode = null;
+                
+                // Try to extract error properties based on the passed object
+                if (errorData is System.Text.Json.JsonElement jsonElement)
+                {
+                    if (jsonElement.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        errorName = nameElement.GetString() ?? errorName;
+                    }
+                    
+                    if (jsonElement.TryGetProperty("message", out var messageElement) && messageElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        errorMessage = messageElement.GetString() ?? errorMessage;
+                    }
+                    
+                    if (jsonElement.TryGetProperty("code", out var codeElement) && codeElement.ValueKind == System.Text.Json.JsonValueKind.Number)
+                    {
+                        errorCode = codeElement.GetInt32();
+                    }
+                }
+                
+                var exception = new IndexedDbException(errorMessage, errorName, errorCode);
+                RaiseNotification(IndexDBActionOutCome.Failed, exception.Message);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error handling JavaScript error callback: {ex.Message}");
+                RaiseNotification(IndexDBActionOutCome.Failed, "Error handling JavaScript error");
+            }
+        }
+        
         private async Task<TResult> CallJavascript<TData, TResult>(string functionName, TData data, DotNetObjectReference<IndexedDBManager>? dotNetRef = null)
         {
-            if (dotNetRef != null)
+            try
             {
-                return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", data, dotNetRef);
+                if (dotNetRef != null)
+                {
+                    return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", data, dotNetRef);
+                }
+                else
+                {
+                    return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", data);
+                }
             }
-            else
+            catch (JSException jsEx)
             {
-                return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", data);
+                var exception = new IndexedDbException(
+                    jsEx.Message,
+                    "JSException",
+                    null,
+                    null);
+                
+                RaiseNotification(IndexDBActionOutCome.Failed, exception.Message);
+                throw exception;
             }
         }
 
         private async Task<TResult> CallJavascript<TResult>(string functionName, params object[] args)
         {
-            return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", args);
+            try
+            {
+                return await _jsRuntime.InvokeAsync<TResult>($"{InteropPrefix}.{functionName}", args);
+            }
+            catch (JSException jsEx)
+            {
+                var exception = new IndexedDbException(
+                    jsEx.Message,
+                    "JSException",
+                    null,
+                    null);
+                
+                RaiseNotification(IndexDBActionOutCome.Failed, exception.Message);
+                throw exception;
+            }
         }
 
         /// <summary>
@@ -386,11 +468,7 @@ namespace TG.Blazor.IndexedDB
 
         private void RaiseNotification(IndexDBActionOutCome outcome, string message)
         {
-            ActionCompleted?.Invoke(this, new IndexedDBNotificationArgs
-            {
-                Outcome = outcome,
-                Message = message
-            });
+            ActionCompleted?.Invoke(this, new IndexedDBNotificationArgs { Message = message, Outcome = outcome });
         }
         
         /// <summary>

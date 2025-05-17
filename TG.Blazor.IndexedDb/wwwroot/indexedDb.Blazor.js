@@ -26,10 +26,14 @@ class IndexedDbManager {
         this.dbInstance = null;
         this.dbName = '';
         this.dotnetCallback = (message) => { };
+        this.errorCallback = (error) => { };
         this.openDb = (data, instanceWrapper) => __awaiter(this, void 0, void 0, function* () {
             const dbStore = data;
             this.dotnetCallback = (message) => {
                 instanceWrapper.instance.invokeMethodAsync(instanceWrapper.methodName, message);
+            };
+            this.errorCallback = (error) => {
+                instanceWrapper.instance.invokeMethodAsync("ErrorCallback", error);
             };
             try {
                 this.dbName = dbStore.dbName;
@@ -48,117 +52,183 @@ class IndexedDbManager {
                 }
             }
             catch (e) {
-                this.dbInstance = yield (0, idb_1.openDB)(dbStore.dbName);
+                try {
+                    this.dbInstance = yield (0, idb_1.openDB)(dbStore.dbName);
+                }
+                catch (innerErr) {
+                    this.reportError(innerErr);
+                    throw innerErr;
+                }
             }
             return `IndexedDB ${data.dbName} opened`;
         });
         this.getDbInfo = (dbName, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            if (this.dbName !== dbName) {
-                if (this.dbInstance) {
-                    this.dbInstance.close();
+            try {
+                if (this.dbName !== dbName) {
+                    if (this.dbInstance) {
+                        this.dbInstance.close();
+                    }
+                    this.dbInstance = yield (0, idb_1.openDB)(dbName);
+                    this.dbName = dbName;
                 }
-                this.dbInstance = yield (0, idb_1.openDB)(dbName);
-                this.dbName = dbName;
-            }
-            if (!this.dbInstance) {
-                throw new Error("Database instance not initialized");
-            }
-            let getStoreNames = (list) => {
-                let names = [];
-                for (var i = 0; i < list.length; i++) {
-                    names.push(list[i]);
+                if (!this.dbInstance) {
+                    throw new Error("Database instance not initialized");
                 }
-                return names;
-            };
-            const dbInfo = {
-                version: this.dbInstance.version,
-                storeNames: getStoreNames(this.dbInstance.objectStoreNames)
-            };
-            return dbInfo;
+                let getStoreNames = (list) => {
+                    let names = [];
+                    for (var i = 0; i < list.length; i++) {
+                        names.push(list[i]);
+                    }
+                    return names;
+                };
+                const dbInfo = {
+                    version: this.dbInstance.version,
+                    storeNames: getStoreNames(this.dbInstance.objectStoreNames)
+                };
+                return dbInfo;
+            }
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.deleteDb = (dbName) => __awaiter(this, void 0, void 0, function* () {
-            if (this.dbInstance && this.dbInstance.name === dbName) {
-                this.dbInstance.close();
-                this.dbInstance = null;
-                this.dbName = '';
+            try {
+                if (this.dbInstance && this.dbInstance.name === dbName) {
+                    this.dbInstance.close();
+                    this.dbInstance = null;
+                    this.dbName = '';
+                }
+                yield (0, idb_1.deleteDB)(dbName);
+                return `The database ${dbName} has been deleted`;
             }
-            yield (0, idb_1.deleteDB)(dbName);
-            return `The database ${dbName} has been deleted`;
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.addRecord = (record, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            this.ensureDbIsOpen();
-            const stName = record.storeName;
-            let itemToSave = record.data;
-            const tx = this.dbInstance.transaction(stName, 'readwrite');
-            const objectStore = tx.objectStore(stName);
-            itemToSave = this.checkForKeyPath(objectStore, itemToSave);
-            const result = record.key ?
-                yield objectStore.add(itemToSave, record.key) :
-                yield objectStore.add(itemToSave);
-            yield tx.done;
-            return `Added new record with id ${result}`;
+            try {
+                this.ensureDbIsOpen();
+                const stName = record.storeName;
+                let itemToSave = record.data;
+                const tx = this.dbInstance.transaction(stName, 'readwrite');
+                const objectStore = tx.objectStore(stName);
+                itemToSave = this.checkForKeyPath(objectStore, itemToSave);
+                const result = record.key ?
+                    yield objectStore.add(itemToSave, record.key) :
+                    yield objectStore.add(itemToSave);
+                yield tx.done;
+                return `Added new record with id ${result}`;
+            }
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.updateRecord = (record, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            this.ensureDbIsOpen();
-            const stName = record.storeName;
-            const tx = this.dbInstance.transaction(stName, 'readwrite');
-            const result = record.key ?
-                yield tx.objectStore(stName).put(record.data, record.key) :
-                yield tx.objectStore(stName).put(record.data);
-            yield tx.done;
-            return `updated record with id ${result}`;
+            try {
+                this.ensureDbIsOpen();
+                const stName = record.storeName;
+                const tx = this.dbInstance.transaction(stName, 'readwrite');
+                const result = record.key ?
+                    yield tx.objectStore(stName).put(record.data, record.key) :
+                    yield tx.objectStore(stName).put(record.data);
+                yield tx.done;
+                return `updated record with id ${result}`;
+            }
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.getRecords = (storeName, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            this.ensureDbIsOpen();
-            const tx = this.dbInstance.transaction(storeName, 'readonly');
-            const results = yield tx.objectStore(storeName).getAll();
-            yield tx.done;
-            return results;
+            try {
+                this.ensureDbIsOpen();
+                const tx = this.dbInstance.transaction(storeName, 'readonly');
+                const results = yield tx.objectStore(storeName).getAll();
+                yield tx.done;
+                return results;
+            }
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.clearStore = (storeName, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            this.ensureDbIsOpen();
-            const tx = this.dbInstance.transaction(storeName, 'readwrite');
-            yield tx.objectStore(storeName).clear();
-            yield tx.done;
-            return `Store ${storeName} cleared`;
+            try {
+                this.ensureDbIsOpen();
+                const tx = this.dbInstance.transaction(storeName, 'readwrite');
+                yield tx.objectStore(storeName).clear();
+                yield tx.done;
+                return `Store ${storeName} cleared`;
+            }
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.getRecordByIndex = (searchData, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            this.ensureDbIsOpen();
-            const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
-            const results = yield tx.objectStore(searchData.storeName)
-                .index(searchData.indexName)
-                .get(searchData.queryValue);
-            yield tx.done;
-            return results;
+            try {
+                this.ensureDbIsOpen();
+                const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+                const results = yield tx.objectStore(searchData.storeName)
+                    .index(searchData.indexName)
+                    .get(searchData.queryValue);
+                yield tx.done;
+                return results;
+            }
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.getAllRecordsByIndex = (searchData, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            this.ensureDbIsOpen();
-            const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
-            const index = tx.objectStore(searchData.storeName).index(searchData.indexName);
-            let results = [];
-            let cursor = yield index.openCursor();
-            while (cursor) {
-                if (cursor.key === searchData.queryValue) {
-                    results.push(cursor.value);
+            try {
+                this.ensureDbIsOpen();
+                const tx = this.dbInstance.transaction(searchData.storeName, 'readonly');
+                const index = tx.objectStore(searchData.storeName).index(searchData.indexName);
+                let results = [];
+                let cursor = yield index.openCursor();
+                while (cursor) {
+                    if (cursor.key === searchData.queryValue) {
+                        results.push(cursor.value);
+                    }
+                    cursor = yield cursor.continue();
                 }
-                cursor = yield cursor.continue();
+                yield tx.done;
+                return results;
             }
-            yield tx.done;
-            return results;
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.getRecordById = (storeName, id, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            this.ensureDbIsOpen();
-            const tx = this.dbInstance.transaction(storeName, 'readonly');
-            let result = yield tx.objectStore(storeName).get(id);
-            yield tx.done;
-            return result;
+            try {
+                this.ensureDbIsOpen();
+                const tx = this.dbInstance.transaction(storeName, 'readonly');
+                let result = yield tx.objectStore(storeName).get(id);
+                yield tx.done;
+                return result;
+            }
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.deleteRecord = (storeName, id, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            this.ensureDbIsOpen();
-            const tx = this.dbInstance.transaction(storeName, 'readwrite');
-            yield tx.objectStore(storeName).delete(id);
-            yield tx.done;
-            return `Record with id: ${id} deleted`;
+            try {
+                this.ensureDbIsOpen();
+                const tx = this.dbInstance.transaction(storeName, 'readwrite');
+                yield tx.objectStore(storeName).delete(id);
+                yield tx.done;
+                return `Record with id: ${id} deleted`;
+            }
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
         this.getAllDatabaseNames = () => __awaiter(this, void 0, void 0, function* () {
             if ('databases' in indexedDB) {
@@ -168,6 +238,7 @@ class IndexedDbManager {
                 }
                 catch (e) {
                     console.error('Error getting database names:', e);
+                    this.reportError(e);
                     return [];
                 }
             }
@@ -176,43 +247,49 @@ class IndexedDbManager {
             }
         });
         this.renameStore = (oldName, newName, dotNetRef) => __awaiter(this, void 0, void 0, function* () {
-            this.ensureDbIsOpen();
-            const tx = this.dbInstance.transaction(oldName, 'readwrite');
-            const oldStore = tx.objectStore(oldName);
-            const allData = yield oldStore.getAll();
-            yield tx.done;
-            const newVersion = this.dbInstance.version + 1;
-            yield this.dbInstance.close();
-            const upgradedDb = yield (0, idb_1.openDB)(this.dbName, newVersion, {
-                upgrade(database, oldVersion, newVersion, transaction) {
-                    const oldStoreConfig = database.objectStoreNames.contains(oldName) ?
-                        transaction.objectStore(oldName) : null;
-                    if (oldStoreConfig) {
-                        const newStore = database.createObjectStore(newName, {
-                            keyPath: oldStoreConfig.keyPath,
-                            autoIncrement: oldStoreConfig.autoIncrement
-                        });
-                        for (const indexName of oldStoreConfig.indexNames) {
-                            const index = oldStoreConfig.index(indexName);
-                            newStore.createIndex(indexName, index.keyPath, {
-                                unique: index.unique,
-                                multiEntry: index.multiEntry
+            try {
+                this.ensureDbIsOpen();
+                const tx = this.dbInstance.transaction(oldName, 'readwrite');
+                const oldStore = tx.objectStore(oldName);
+                const allData = yield oldStore.getAll();
+                yield tx.done;
+                const newVersion = this.dbInstance.version + 1;
+                yield this.dbInstance.close();
+                const upgradedDb = yield (0, idb_1.openDB)(this.dbName, newVersion, {
+                    upgrade(database, oldVersion, newVersion, transaction) {
+                        const oldStoreConfig = database.objectStoreNames.contains(oldName) ?
+                            transaction.objectStore(oldName) : null;
+                        if (oldStoreConfig) {
+                            const newStore = database.createObjectStore(newName, {
+                                keyPath: oldStoreConfig.keyPath,
+                                autoIncrement: oldStoreConfig.autoIncrement
                             });
+                            for (const indexName of oldStoreConfig.indexNames) {
+                                const index = oldStoreConfig.index(indexName);
+                                newStore.createIndex(indexName, index.keyPath, {
+                                    unique: index.unique,
+                                    multiEntry: index.multiEntry
+                                });
+                            }
+                            database.deleteObjectStore(oldName);
                         }
-                        database.deleteObjectStore(oldName);
                     }
+                });
+                if (allData.length > 0) {
+                    const newTx = upgradedDb.transaction(newName, 'readwrite');
+                    const newStore = newTx.objectStore(newName);
+                    for (const item of allData) {
+                        yield newStore.add(item);
+                    }
+                    yield newTx.done;
                 }
-            });
-            if (allData.length > 0) {
-                const newTx = upgradedDb.transaction(newName, 'readwrite');
-                const newStore = newTx.objectStore(newName);
-                for (const item of allData) {
-                    yield newStore.add(item);
-                }
-                yield newTx.done;
+                this.dbInstance = upgradedDb;
+                return `Store ${oldName} renamed to ${newName}`;
             }
-            this.dbInstance = upgradedDb;
-            return `Store ${oldName} renamed to ${newName}`;
+            catch (err) {
+                this.reportError(err);
+                throw err;
+            }
         });
     }
     ensureDbIsOpen() {
@@ -253,6 +330,18 @@ class IndexedDbManager {
         const newStore = db.createObjectStore(store.name, { keyPath: primaryKey.keyPath, autoIncrement: primaryKey.auto });
         for (var index of store.indexes) {
             newStore.createIndex(index.name, index.keyPath, { unique: index.unique });
+        }
+    }
+    reportError(error) {
+        const errorObj = {
+            message: (error === null || error === void 0 ? void 0 : error.message) || 'Unknown error',
+            name: (error === null || error === void 0 ? void 0 : error.name) || 'Error',
+            stack: error === null || error === void 0 ? void 0 : error.stack,
+            code: error === null || error === void 0 ? void 0 : error.code
+        };
+        console.error('IndexedDB error:', error);
+        if (typeof this.errorCallback === 'function') {
+            this.errorCallback(errorObj);
         }
     }
 }
@@ -338,9 +427,7 @@ function cacheDonePromiseForTransaction(tx) {
             unlisten();
         };
         const error = () => {
-            console.error(tx);
-            console.error(tx.error);
-            reject(tx.error || new DOMException('AbortError', 'AbortError'));
+            reject('UnknownError');
             unlisten();
         };
         tx.addEventListener('complete', complete);
